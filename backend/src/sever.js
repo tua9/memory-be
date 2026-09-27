@@ -9,7 +9,6 @@ const START_SERVER = () => {
   const app = express()
 
   // Core middlewares
-  app.use(cors(corsOptions))
   app.use(express.json({ limit: '100kb' }))
   app.use(express.urlencoded({ extended: true, limit: '100kb' }))
   app.use(cookieParser())
