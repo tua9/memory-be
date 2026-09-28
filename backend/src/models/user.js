@@ -21,9 +21,6 @@ const userSchema = new mongoose.Schema(
 
     passwordHash: {
       type: String,
-      required: function () {
-        return this.authProvider === 'local'
-      },
       default: null,
     },
 
@@ -40,7 +37,7 @@ const userSchema = new mongoose.Schema(
             "user",
             "admin"
       ],
-      default: user
+      default: 'user'
     },
 
   },

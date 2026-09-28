@@ -1,20 +1,11 @@
 import express from 'express'
-import {Resgister, 
-        Login, 
-        Refresh, 
-        Logout, 
-        resetPassword, 
-        forgotPassword  
-        } from "../controller/auth.controller"
-        
-const router = express.Router();
+import { signUp, signIn, refresh, signOut } from '../controller/auth.controller.js'
 
-router.post = ("/resgister", Resgister );
-router.post = ("/login", Login );
-router.post = ("/refresh", Refresh );
-router.post = ("/logout", Logout );
-router.post = ("/reset-password", resetPassword );
-router.post = ("/forgot-password", forgotPassword );
+const router = express.Router()
 
+router.post('/register', signUp)
+router.post('/login', signIn)
+router.post('/refresh', refresh)
+router.post('/logout', signOut)
 
-export default router;
+export default router

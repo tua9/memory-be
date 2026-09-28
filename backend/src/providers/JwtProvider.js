@@ -10,7 +10,7 @@ const generateToken = async (userInfo, secretKey, tokenLife) => {
 const verifyToken = async (token, secretKey) => {
   // Giữ nguyên error gốc (TokenExpiredError / JsonWebTokenError) để nơi gọi
   // có thể phân biệt qua err.name thay vì chỉ dựa vào message.
-  return JWT.verify(token, secretKey)
+  return JWT.verify(token, secretKey, { algorithms: ['HS256'] })
 }
 
 export const JwtProvider = {

@@ -1,50 +1,50 @@
-import user from "../models/user.js"
-import asyncHandler from "../middlewares/asyncHandler.js"
+import { asyncHandler } from '../middlewares/asyncHandler.js'
 import { StatusCodes } from 'http-status-codes'
-
-
-
-const isProduction = env.BUILD_MODE === 'production'
+import { env } from '../config/environment.js'
+import { authService } from '../services/user.service.js'
 
 const BASE_COOKIE_OPTIONS = {
   httpOnly: true,
-  secure: isProduction,
-  sameSite: isProduction ? 'none' : 'lax',
+  secure: env.BUILD_MODE === 'production',
+  sameSite: 'lax',
+  path: '/',
 }
 
-const AUTH_COOKIE_OPTIONS = {
-  ...BASE_COOKIE_OPTIONS,
-  maxAge: ms(env.REFRESH_TOKEN_TTL),
+const setAuthCookies = (res, tokens) => {
+  res.cookie('accessToken', tokens.accessToken, {
+    ...BASE_COOKIE_OPTIONS, expires: tokens.accessExpiresAt,
+  })
+  res.cookie('refreshToken', tokens.refreshToken, {
+    ...BASE_COOKIE_OPTIONS, expires: tokens.refreshExpiresAt,
+  })
 }
 
-// Gắn access/refresh token vào cookie (chỉ set token nào được truyền vào)
-const setAuthCookies = (res, { accessToken, refreshToken } = {}) => {
-  if (accessToken) res.cookie('accessToken', accessToken, AUTH_COOKIE_OPTIONS)
-  if (refreshToken) res.cookie('refreshToken', refreshToken, AUTH_COOKIE_OPTIONS)
-}
-
-// Xoá cookie auth khi đăng xuất
-const clearAuthCookies = (res) => {
-  res.clearCookie('accessToken')
-  res.clearCookie('refreshToken')
-}
-
-export const signOut = asyncHandler(async (req, res) => {
-  const refreshToken = req.cookies?.refreshToken
-  await authService.signOut(refreshToken)
-
-  clearAuthCookies(res)
-  res.status(StatusCodes.OK).json({ message: 'Sign out successful' })
+export const signUp = asyncHandler(async (req, res) => {
+  const userInfo = await authService.signUp(req.body)
+  res.status(StatusCodes.CREATED).json({
+    status: 'success', message: 'Sign up successful', data: { userInfo },
+  })
 })
 
 export const signIn = asyncHandler(async (req, res) => {
-  const result = await authService.signIn(req.body)
-  const { accessToken, refreshToken, fullName } = result.data
-
-  setAuthCookies(res, { accessToken, refreshToken })
-
+  const tokens = await authService.signIn(req.body)
+  setAuthCookies(res, tokens)
   res.status(StatusCodes.OK).json({
-    message: `Sign in successful: User[${fullName}]`,
-    ...result // Wrap data as status: success
+    status: 'success', message: 'Sign in successful', data: { userInfo: tokens.userInfo },
   })
+})
+
+export const refresh = asyncHandler(async (req, res) => {
+  const tokens = await authService.refreshToken(req.cookies?.refreshToken)
+  setAuthCookies(res, tokens)
+  res.status(StatusCodes.OK).json({
+    status: 'success', message: 'Token refreshed', data: { userInfo: tokens.userInfo },
+  })
+})
+
+export const signOut = asyncHandler(async (req, res) => {
+  await authService.signOut(req.cookies?.refreshToken)
+  res.clearCookie('accessToken', BASE_COOKIE_OPTIONS)
+  res.clearCookie('refreshToken', BASE_COOKIE_OPTIONS)
+  res.status(StatusCodes.OK).json({ status: 'success', message: 'Sign out successful' })
 })

@@ -8,6 +8,7 @@ const sessionSchema = new mongoose.Schema(
       required: true,
       index: true,
     },
+    // Store the SHA-256 hash, never the raw refresh token.
     refreshToken: { type: String, required: true, unique: true },
     expiresAt: { type: Date, required: true },
   },
