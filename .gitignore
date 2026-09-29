@@ -1,13 +1,4 @@
-<<<<<<< HEAD
-node_modules/
-dist/
-coverage/
-*.log
-.DS_Store
-.env
-.env.*
-!.env.example
-=======
+
 # =========================
 # Environment variables
 # =========================
@@ -110,4 +101,3 @@ temp/
 .yarn/install-state.gz
 docs/
 *.docx
->>>>>>> backend-from-web

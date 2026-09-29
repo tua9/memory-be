@@ -1,17 +1,20 @@
 # Quy chuẩn công nghệ và code
 
-> Tài liệu này định nghĩa stack và quy ước cho `training-memory-be`. Stack cốt lõi đã được khởi tạo gồm TypeScript, Express, dotenv, nodemon và tsx; cấu hình thực tế nằm trong `package.json`, `tsconfig.json` và `src/`.
+> Tài liệu này định nghĩa stack và quy ước cho `training-memory-be`. Cấu hình thực tế nằm trong `package.json`, `tsconfig.json` và `src/`.
 
 ## 1. Stack công nghệ
 
-| Công nghệ  | Vai trò                           | Quy ước                                                                    |
-| ---------- | --------------------------------- | -------------------------------------------------------------------------- |
-| Node.js    | Runtime                           | Dùng phiên bản LTS; thống nhất phiên bản trong nhóm và CI.                 |
-| TypeScript | Ngôn ngữ                          | Bật `strict`; không dùng `any` nếu chưa có lý do rõ ràng.                  |
-| Express    | HTTP framework                    | Router xử lý định tuyến; middleware dùng cho các concern xuyên suốt.       |
-| dotenv     | Nạp biến môi trường               | Nạp tại điểm khởi động; không đọc `.env` trực tiếp rải rác trong ứng dụng. |
-| nodemon    | Theo dõi thay đổi khi phát triển  | Chỉ dùng cho môi trường development, không dùng để chạy production.        |
-| tsx        | Chạy TypeScript trong development | Kết hợp với nodemon qua script `dev`.                                      |
+| Công nghệ    | Vai trò                           | Quy ước                                                                    |
+| ------------ | --------------------------------- | -------------------------------------------------------------------------- |
+| Node.js      | Runtime                           | Dùng phiên bản LTS; thống nhất phiên bản trong nhóm và CI.                 |
+| TypeScript   | Ngôn ngữ                          | Bật `strict`; không dùng `any` nếu chưa có lý do rõ ràng.                  |
+| Express      | HTTP framework                    | Router xử lý định tuyến; middleware dùng cho các concern xuyên suốt.       |
+| dotenv       | Nạp biến môi trường               | Nạp tại điểm khởi động; không đọc `.env` trực tiếp rải rác trong ứng dụng. |
+| Mongoose     | MongoDB ODM                       | Schema và truy vấn dữ liệu nằm trong `src/models/`.                        |
+| bcrypt       | Băm mật khẩu                      | Không lưu mật khẩu dạng rõ; xác thực qua bcrypt.                           |
+| jsonwebtoken | Access/refresh token              | Ký HS256; access và refresh dùng secret riêng.                             |
+| nodemon      | Theo dõi thay đổi khi phát triển  | Chỉ dùng cho môi trường development, không dùng để chạy production.        |
+| tsx          | Chạy TypeScript trong development | Kết hợp với nodemon qua script `dev`.                                      |
 
 Các thư viện bổ trợ như validator, logger, test runner và database client cần được thống nhất trước khi đưa vào dự án. Không tự thêm dependency chỉ để giải quyết một tác vụ nhỏ nếu có thể dùng API sẵn có của nền tảng.
 
@@ -21,12 +24,13 @@ Dùng npm và commit lockfile tương ứng. Scripts hiện tại được khai 
 
 ```json
 {
-    "scripts": {
-        "dev": "nodemon --watch src --ext ts --exec tsx src/server.ts",
-        "build": "tsc -p tsconfig.json",
-        "start": "node dist/server.js",
-        "typecheck": "tsc --noEmit"
-    }
+  "scripts": {
+    "dev": "nodemon --watch src --ext ts --exec tsx src/server.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/server.js",
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test test/auth.test.ts"
+  }
 }
 ```
 
@@ -40,12 +44,12 @@ Tổ chức theo trách nhiệm, chỉ tạo thư mục khi có mã nguồn cầ
 src/
   app.ts                 # Tạo Express app và đăng ký middleware/routes
   server.ts              # Nạp cấu hình và mở cổng
-  config/                # Cấu hình ứng dụng, đọc env qua một đầu mối
+  config/                # Cấu hình ứng dụng và kết nối MongoDB
   routes/                # Khai báo endpoint và gắn middleware/controller
-  controllers/            # Nhận request, gọi service, trả response
+  controller/             # Nhận request, gọi service, trả response
   services/               # Quy tắc nghiệp vụ
   repositories/           # Truy cập và lưu trữ dữ liệu (khi cần)
-  middleware/             # Middleware dùng chung, gồm xử lý lỗi
+  middlewares/            # Middleware dùng chung, gồm xử lý lỗi
   types/                  # TypeScript types dùng chung
   utils/                  # Hàm tiện ích thuần, không chứa nghiệp vụ
 ```
