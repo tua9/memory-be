@@ -4,7 +4,7 @@ export type UserStatus = "active" | "inactive" | "banned";
 export type UserRole = "user" | "admin";
 
 export interface UserDocument extends Document {
-    fullName: string;
+    username: string;
     email: string;
     passwordHash: string | null;
     status: UserStatus;
@@ -13,7 +13,7 @@ export interface UserDocument extends Document {
 
 const userSchema = new mongoose.Schema<UserDocument>(
     {
-        fullName: {
+        username: {
             type: String,
             required: true,
             trim: true,

@@ -2,22 +2,22 @@ import bcrypt from "bcrypt";
 import { createHash, randomUUID } from "node:crypto";
 import { StatusCodes } from "http-status-codes";
 import type { JwtPayload, SignOptions } from "jsonwebtoken";
-import { env } from "../config/env";
-import User, { type UserDocument } from "../models/user";
-import Session from "../models/sessions";
-import { JwtProvider } from "../providers/JwtProvider";
-import ApiError from "../utils/ApiError";
+import { env } from "../config/env.js";
+import User, { type UserDocument } from "../models/user.js";
+import Session from "../models/sessions.js";
+import { JwtProvider } from "../providers/JwtProvider.js";
+import ApiError from "../utils/ApiError.js";
 
 interface CredentialsBody {
     email?: unknown;
     password?: unknown;
-    fullName?: unknown;
+    username?: unknown;
 }
 
 interface UserInfo {
     _id: string;
     email: string;
-    fullName: string;
+    username: string;
     status: string;
     role: string;
 }
@@ -35,7 +35,7 @@ const hashToken = (token: string): string => createHash("sha256").update(token).
 const buildUserInfo = (user: UserDocument): UserInfo => ({
     _id: user._id.toString(),
     email: user.email,
-    fullName: user.fullName,
+    username: user.username,
     status: user.status,
     role: user.role,
 });
@@ -94,10 +94,10 @@ const generateTokens = async (user: UserDocument): Promise<AuthTokens> => {
 
 const signUp = async (body: unknown): Promise<UserInfo> => {
     const { email, password } = validateCredentials(body);
-    const fullName = asCredentials(body).fullName;
-    const normalizedFullName = typeof fullName === "string" ? fullName.trim() : "";
-    if (normalizedFullName.length < 2 || normalizedFullName.length > 100 || password.length < 8) {
-        throw new ApiError(StatusCodes.BAD_REQUEST, "Full name must be 2-100 characters and password at least 8 characters");
+    const username = asCredentials(body).username;
+    const normalizedUserName = typeof username === "string" ? username.trim() : "";
+    if (normalizedUserName.length < 2 || normalizedUserName.length > 100 || password.length < 8) {
+        throw new ApiError(StatusCodes.BAD_REQUEST, "User name must be 2-100 characters and password at least 8 characters");
     }
     if (await User.findOne({ email })) {
         throw new ApiError(StatusCodes.CONFLICT, "Email already exists");
@@ -107,7 +107,7 @@ const signUp = async (body: unknown): Promise<UserInfo> => {
     try {
         const user = await User.create({
             email,
-            fullName: normalizedFullName,
+            username: normalizedUserName,
             passwordHash,
             role: "user",
             status: "active",
@@ -163,7 +163,7 @@ const refreshToken = async (token: unknown): Promise<AuthTokens> => {
     const tokens = await generateTokens(user);
     const session = await Session.findOneAndUpdate(
         { userId: user._id, refreshToken: hashToken(token), expiresAt: { $gt: new Date() } },
-        { $set: { refreshToken: hashToken(tokens.refreshToken), expiresAt: tokens.refreshExpiresAt } },
+        { $set: { refreshToken: hashToken(tokens.refreshToken) } },
         { new: true, runValidators: true },
     );
     if (!session) {

@@ -1,12 +1,12 @@
 import type { CookieOptions, RequestHandler, Response } from "express";
 import { StatusCodes } from "http-status-codes";
-import { env } from "../config/env";
-import { asyncHandler } from "../middlewares/asyncHandler";
-import { authService, type AuthTokens } from "../services/user.service";
+import { env } from "../config/env.js";
+import { asyncHandler } from "../middlewares/asyncHandler.js";
+import { authService, type AuthTokens } from "../services/user.service.js";
 
 const baseCookieOptions: CookieOptions = {
     httpOnly: true,
-    secure: env.BUILD_MODE === "production",
+    secure: env.IS_PRODUCTION,
     sameSite: "lax",
     path: "/",
 };
