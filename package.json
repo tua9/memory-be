@@ -3,22 +3,33 @@
     "version": "1.0.0",
     "description": "Training memory backend API",
     "main": "dist/server.js",
+    "type": "module",
     "scripts": {
         "dev": "nodemon --watch src --ext ts --exec tsx src/server.ts",
-        "build": "tsc -p tsconfig.json",
+        "build": "tsc --noEmit && esbuild src/server.ts --bundle --platform=node --format=esm --packages=external --sourcemap --outfile=dist/server.js",
         "start": "node dist/server.js",
-        "typecheck": "tsc --noEmit"
+        "typecheck": "tsc --noEmit",
+        "test": "tsx --test test/auth.test.ts"
     },
     "keywords": [],
     "author": "",
     "license": "ISC",
     "dependencies": {
+        "bcrypt": "^6.0.0",
+        "cookie-parser": "^1.4.7",
         "dotenv": "^18.0.4",
-        "express": "^5.2.1"
+        "express": "^5.2.1",
+        "http-status-codes": "^2.3.0",
+        "jsonwebtoken": "^9.0.3",
+        "mongoose": "^9.10.2"
     },
     "devDependencies": {
+        "@types/bcrypt": "^5.0.2",
+        "@types/cookie-parser": "^1.4.9",
         "@types/express": "^5.0.6",
+        "@types/jsonwebtoken": "^9.0.10",
         "@types/node": "^26.6.3",
+        "esbuild": "^0.28.2",
         "nodemon": "^3.1.14",
         "ts-node": "^10.9.2",
         "tsx": "^4.23.15",
