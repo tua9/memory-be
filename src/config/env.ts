@@ -1,10 +1,15 @@
-const port = Number(process.env.PORT ?? 3000);
+import dotenv from "dotenv";
 
-if (!Number.isInteger(port) || port < 1 || port > 65535) {
-    throw new Error("PORT must be an integer between 1 and 65535.");
-}
+dotenv.config();
 
 export const env = {
-    nodeEnv: process.env.NODE_ENV ?? "development",
-    port,
+    BUILD_MODE: process.env.BUILD_MODE || "dev",
+    PORT: process.env.PORT || 5001,
+    CLIENT_URL: process.env.CLIENT_URL || "http://localhost:5173",
+    MONGODB_CONNECTION_STRING: process.env.MONGODB_CONNECTION_STRING || "",
+    ACCESS_TOKEN_SECRET: process.env.ACCESS_TOKEN_SECRET || "",
+    REFRESH_TOKEN_SECRET: process.env.REFRESH_TOKEN_SECRET || "",
+    ACCESS_TOKEN_TTL: process.env.ACCESS_TOKEN_TTL || "15m",
+    REFRESH_TOKEN_TTL: process.env.REFRESH_TOKEN_TTL || "14d",
+    GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID,
 };
