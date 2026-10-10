@@ -2,8 +2,17 @@ import dotenv from "dotenv";
 
 dotenv.config();
 
+const NODE_ENVS = ["development", "production", "test"] as const;
+type NodeEnv = (typeof NODE_ENVS)[number];
+
+const NODE_ENV = process.env.NODE_ENV || "development";
+if (!NODE_ENVS.includes(NODE_ENV as NodeEnv)) {
+    throw new Error(`Invalid NODE_ENV "${NODE_ENV}". Expected one of: ${NODE_ENVS.join(", ")}`);
+}
+
 export const env = {
-    BUILD_MODE: process.env.BUILD_MODE || "dev",
+    NODE_ENV: NODE_ENV as NodeEnv,
+    IS_PRODUCTION: NODE_ENV === "production",
     PORT: process.env.PORT || 5001,
     CLIENT_URL: process.env.CLIENT_URL || "http://localhost:5173",
     MONGODB_CONNECTION_STRING: process.env.MONGODB_CONNECTION_STRING || "",
