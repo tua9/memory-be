@@ -1,10 +1,10 @@
 import type { RequestHandler } from "express";
 import { StatusCodes } from "http-status-codes";
-import { env } from "../config/env.js";
-import User, { type UserDocument } from "../models/user.js";
-import { JwtProvider } from "../providers/JwtProvider.js";
-import ApiError from "../utils/ApiError.js";
-import { asyncHandler } from "./asyncHandler.js";
+import { env } from "../config/env";
+import User, { type UserDocument } from "../models/user";
+import { JwtProvider } from "../providers/JwtProvider";
+import ApiError from "../utils/ApiError";
+import { asyncHandler } from "./asyncHandler";
 
 declare global {
     namespace Express {

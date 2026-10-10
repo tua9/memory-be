@@ -1,6 +1,6 @@
 import type { ErrorRequestHandler } from "express";
 import { StatusCodes } from "http-status-codes";
-import { env } from "../config/env.js";
+import { env } from "../config/env";
 
 type ErrorWithStatus = Error & {
     statusCode?: number;
