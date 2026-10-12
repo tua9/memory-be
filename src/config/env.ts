@@ -20,5 +20,7 @@ export const env = {
     REFRESH_TOKEN_SECRET: process.env.REFRESH_TOKEN_SECRET || "",
     ACCESS_TOKEN_TTL: process.env.ACCESS_TOKEN_TTL || "15m",
     REFRESH_TOKEN_TTL: process.env.REFRESH_TOKEN_TTL || "14d",
+    // Thời hạn tối đa của phiên khi người dùng không chọn "Duy trì đăng nhập"
+    REFRESH_TOKEN_TTL_NO_REMEMBER: process.env.REFRESH_TOKEN_TTL_NO_REMEMBER || "1d",
     GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID,
 };
