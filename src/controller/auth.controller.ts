@@ -11,14 +11,16 @@ const baseCookieOptions: CookieOptions = {
     path: "/",
 };
 
+// Không chọn "Duy trì đăng nhập" thì bỏ expires: cookie thành session cookie,
+// trình duyệt xóa khi đóng. Hạn thật của token vẫn do JWT và Session kiểm soát.
 const setAuthCookies = (response: Response, tokens: AuthTokens): void => {
     response.cookie("accessToken", tokens.accessToken, {
         ...baseCookieOptions,
-        expires: tokens.accessExpiresAt,
+        ...(tokens.rememberMe && { expires: tokens.accessExpiresAt }),
     });
     response.cookie("refreshToken", tokens.refreshToken, {
         ...baseCookieOptions,
-        expires: tokens.refreshExpiresAt,
+        ...(tokens.rememberMe && { expires: tokens.refreshExpiresAt }),
     });
 };
 

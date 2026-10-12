@@ -12,6 +12,7 @@ interface CredentialsBody {
     email?: unknown;
     password?: unknown;
     username?: unknown;
+    rememberMe?: unknown;
 }
 
 interface UserInfo {
@@ -27,6 +28,8 @@ export interface AuthTokens {
     refreshToken: string;
     accessExpiresAt: Date;
     refreshExpiresAt: Date;
+    // false: cookie chỉ sống đến khi đóng trình duyệt và phiên có thời hạn ngắn hơn
+    rememberMe: boolean;
     userInfo: UserInfo;
 }
 
@@ -76,7 +79,10 @@ const ensureAccountCanSignIn = (user: UserDocument): void => {
     }
 };
 
-const generateTokens = async (user: UserDocument): Promise<AuthTokens> => {
+const generateTokens = async (
+    user: UserDocument,
+    rememberMe: boolean,
+): Promise<AuthTokens> => {
     if (
         !env.ACCESS_TOKEN_SECRET ||
         !env.REFRESH_TOKEN_SECRET ||
@@ -100,9 +106,12 @@ const generateTokens = async (user: UserDocument): Promise<AuthTokens> => {
         env.ACCESS_TOKEN_TTL as SignOptions["expiresIn"],
     );
     const refreshToken = await JwtProvider.generateToken(
-        { sub: subject, tokenType: "refresh", jti: randomUUID() },
+        // rememberMe nằm trong payload đã ký để refresh giữ đúng lựa chọn lúc đăng nhập
+        { sub: subject, tokenType: "refresh", jti: randomUUID(), rememberMe },
         env.REFRESH_TOKEN_SECRET,
-        env.REFRESH_TOKEN_TTL as SignOptions["expiresIn"],
+        (rememberMe
+            ? env.REFRESH_TOKEN_TTL
+            : env.REFRESH_TOKEN_TTL_NO_REMEMBER) as SignOptions["expiresIn"],
     );
     const accessPayload = await JwtProvider.verifyToken(
         accessToken,
@@ -127,6 +136,7 @@ const generateTokens = async (user: UserDocument): Promise<AuthTokens> => {
         refreshToken,
         accessExpiresAt: new Date(accessPayload.exp * 1000),
         refreshExpiresAt: new Date(refreshPayload.exp * 1000),
+        rememberMe,
         userInfo: buildUserInfo(user),
     };
 };
@@ -184,7 +194,8 @@ const signIn = async (body: unknown): Promise<AuthTokens> => {
 
     ensureAccountCanSignIn(user);
 
-    const tokens = await generateTokens(user);
+    const rememberMe = asCredentials(body).rememberMe === true;
+    const tokens = await generateTokens(user, rememberMe);
 
     await Session.create({
         userId: user._id,
@@ -238,7 +249,8 @@ const refreshToken = async (token: unknown): Promise<AuthTokens> => {
         throw new ApiError(StatusCodes.UNAUTHORIZED, "Account is unavailable");
     }
     ensureAccountCanSignIn(user);
-    const tokens = await generateTokens(user);
+    // Token cấp trước khi có rememberMe không có trường này: giữ hành vi cũ là duy trì đăng nhập
+    const tokens = await generateTokens(user, payload.rememberMe !== false);
     const session = await Session.findOneAndUpdate(
         {
             userId: user._id,
