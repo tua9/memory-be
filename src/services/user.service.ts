@@ -185,12 +185,12 @@ const signIn = async (body: unknown): Promise<AuthTokens> => {
     ensureAccountCanSignIn(user);
 
     const tokens = await generateTokens(user);
-    
-    // await Session.create({
-    //     userId: user._id,
-    //     refreshToken: hashToken(tokens.refreshToken),
-    //     expiresAt: tokens.refreshExpiresAt,
-    // });
+
+    await Session.create({
+        userId: user._id,
+        refreshToken: hashToken(tokens.refreshToken),
+        expiresAt: tokens.refreshExpiresAt,
+    });
 
     return tokens;
 };

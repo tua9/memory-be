@@ -33,11 +33,11 @@ export const signUp: RequestHandler = asyncHandler(async (request, response) => 
 
 export const signIn: RequestHandler = asyncHandler(async (request, response) => {
     const tokens = await authService.signIn(request.body);
-    // setAuthCookies(response, tokens);
+    setAuthCookies(response, tokens);
     response.status(StatusCodes.OK).json({
         status: "success",
         message: "Sign in successful",
-        data: { userInfo: tokens.userInfo, accessToken: tokens.accessToken, refreshToken: tokens.refreshToken },
+        data: { userInfo: tokens.userInfo },
     });
 });
 
