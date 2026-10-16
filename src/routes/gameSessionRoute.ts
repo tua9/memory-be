@@ -1,9 +1,21 @@
 import express from "express";
-import { gameSessionController } from "../controller/gameSession.controller.js";
+import { protectedRoute } from "../middlewares/authMiddleware.js";
+import { createGameSessionController } from "../controller/gameSession.controller.js";
+import type { GameSessionService } from "../services/gameSession.service.js";
+import { gameSessionService } from "../services/gameSession.service.js";
 
-const router = express.Router();
+export const createGameSessionRouter = (
+	authentication: express.RequestHandler = protectedRoute,
+	service: GameSessionService = gameSessionService,
+) => {
+	const router = express.Router();
+	const controller = createGameSessionController(service);
 
-router.post("/", gameSessionController.createSession);
-router.get("/user/:userId", gameSessionController.getUserHistory);
+	router.use(authentication);
+	router.post("/", controller.createSession);
+	router.get("/user/:userId", controller.getUserHistory);
 
-export default router;
+	return router;
+};
+
+export default createGameSessionRouter();

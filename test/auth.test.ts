@@ -47,6 +47,8 @@ const makeProfileHarness = (repository: UserProfileRepository) => {
         request.user = {
             _id: { toString: () => USER_ID },
             username: currentUsername,
+            exp: 41,
+            streaks: 3,
             email: "private@example.com",
             passwordHash: "private-hash",
             role: "admin",
@@ -87,7 +89,7 @@ test("profile reads expose only profile fields and updates persist the allowed u
         updateUsername: async (userId, username) => {
             assert.equal(userId, USER_ID);
             storedUsername = username;
-            return { username: storedUsername } as Pick<UserDocument, "username">;
+            return { username: storedUsername, exp: 41, streaks: 3 } as Pick<UserDocument, "username" | "exp" | "streaks">;
         },
     });
 
@@ -101,10 +103,10 @@ test("profile reads expose only profile fields and updates persist the allowed u
         assert.deepEqual(initialBody.data.profile, {
             username: "Original Name",
             fullname: null,
-            exp: null,
-            streaks: null,
+            exp: 41,
+            streaks: 3,
         });
-        assert.deepEqual(initialBody.data.unavailableFields, ["fullname", "exp", "streaks"]);
+        assert.deepEqual(initialBody.data.unavailableFields, ["fullname"]);
         assert.equal("email" in initialBody.data.profile, false);
         assert.equal("passwordHash" in initialBody.data.profile, false);
         assert.equal("role" in initialBody.data.profile, false);
@@ -137,7 +139,7 @@ test("empty, invalid, and protected-field updates are rejected without persisten
     const router = makeProfileHarness({
         updateUsername: async (_userId, username) => {
             updateCount += 1;
-            return { username } as Pick<UserDocument, "username">;
+            return { username, exp: 0, streaks: 0 } as Pick<UserDocument, "username" | "exp" | "streaks">;
         },
     });
     const invalidBodies = [

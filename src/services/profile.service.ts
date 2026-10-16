@@ -5,26 +5,26 @@ import ApiError from "../utils/ApiError.js";
 export interface UserProfile {
     username: string;
     fullname: null;
-    exp: null;
-    streaks: null;
+    exp: number;
+    streaks: number;
 }
 
 export interface UserProfileRepository {
-    updateUsername(userId: string, username: string): Promise<Pick<UserDocument, "username"> | null>;
+    updateUsername(userId: string, username: string): Promise<Pick<UserDocument, "username" | "exp" | "streaks"> | null>;
 }
 
 export interface UserProfileService {
-    getProfile(user: Pick<UserDocument, "username">): UserProfile;
+    getProfile(user: Pick<UserDocument, "username" | "exp" | "streaks">): UserProfile;
     updateProfile(userId: string, body: unknown): Promise<UserProfile>;
 }
 
-export const unavailableProfileFields = ["fullname", "exp", "streaks"] as const;
+export const unavailableProfileFields = ["fullname"] as const;
 
-const toUserProfile = (user: Pick<UserDocument, "username">): UserProfile => ({
+const toUserProfile = (user: Pick<UserDocument, "username" | "exp" | "streaks">): UserProfile => ({
     username: user.username,
     fullname: null,
-    exp: null,
-    streaks: null,
+    exp: user.exp,
+    streaks: user.streaks,
 });
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -68,7 +68,7 @@ const defaultRepository: UserProfileRepository = {
         userId,
         { $set: { username } },
         { new: true, runValidators: true },
-    ).select("username").exec(),
+    ).select("username exp streaks").exec(),
 };
 
 export const createUserProfileService = (
