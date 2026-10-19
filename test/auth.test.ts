@@ -9,10 +9,32 @@ import type { UserDocument } from "../src/models/user.js";
 import profileRouter, { createUserProfileRouter } from "../src/routes/profileRoute.js";
 import {
     createUserProfileService,
+    isPlayStreakExpired,
     type UserProfileRepository,
 } from "../src/services/profile.service.js";
 
 const USER_ID = "507f1f77bcf86cd799439011";
+
+test("play streak expires only after a missed UTC calendar day", () => {
+    const now = new Date("2025-10-19T00:05:00.000Z");
+
+    assert.equal(isPlayStreakExpired(null, now), false);
+    assert.equal(isPlayStreakExpired(new Date("2025-10-18T23:59:00.000Z"), now), false);
+    assert.equal(isPlayStreakExpired(new Date("2025-10-17T23:59:00.000Z"), now), true);
+});
+
+test("profile response marks a stale play streak as expired and zero", () => {
+    const service = createUserProfileService({ updateUsername: async () => null });
+    const profile = service.getProfile({
+        username: "Player",
+        exp: 25,
+        streaks: 4,
+        lastActiveDate: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000),
+    });
+
+    assert.equal(profile.streaks, 0);
+    assert.equal(profile.streakExpired, true);
+});
 
 const startTestServer = async (router: express.Router) => {
     const app = express();
@@ -49,6 +71,7 @@ const makeProfileHarness = (repository: UserProfileRepository) => {
             username: currentUsername,
             exp: 41,
             streaks: 3,
+            lastActiveDate: null,
             email: "private@example.com",
             passwordHash: "private-hash",
             role: "admin",
@@ -89,7 +112,7 @@ test("profile reads expose only profile fields and updates persist the allowed u
         updateUsername: async (userId, username) => {
             assert.equal(userId, USER_ID);
             storedUsername = username;
-            return { username: storedUsername, exp: 41, streaks: 3 } as Pick<UserDocument, "username" | "exp" | "streaks">;
+            return { username: storedUsername, exp: 41, streaks: 3, lastActiveDate: null } as Pick<UserDocument, "username" | "exp" | "streaks" | "lastActiveDate">;
         },
     });
 
@@ -105,6 +128,7 @@ test("profile reads expose only profile fields and updates persist the allowed u
             fullname: null,
             exp: 41,
             streaks: 3,
+            streakExpired: false,
         });
         assert.deepEqual(initialBody.data.unavailableFields, ["fullname"]);
         assert.equal("email" in initialBody.data.profile, false);
@@ -139,7 +163,7 @@ test("empty, invalid, and protected-field updates are rejected without persisten
     const router = makeProfileHarness({
         updateUsername: async (_userId, username) => {
             updateCount += 1;
-            return { username, exp: 0, streaks: 0 } as Pick<UserDocument, "username" | "exp" | "streaks">;
+            return { username, exp: 0, streaks: 0, lastActiveDate: null } as Pick<UserDocument, "username" | "exp" | "streaks" | "lastActiveDate">;
         },
     });
     const invalidBodies = [

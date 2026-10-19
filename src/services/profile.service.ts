@@ -7,25 +7,47 @@ export interface UserProfile {
     fullname: null;
     exp: number;
     streaks: number;
+    streakExpired: boolean;
 }
 
 export interface UserProfileRepository {
-    updateUsername(userId: string, username: string): Promise<Pick<UserDocument, "username" | "exp" | "streaks"> | null>;
+    updateUsername(userId: string, username: string): Promise<Pick<UserDocument, "username" | "exp" | "streaks" | "lastActiveDate"> | null>;
 }
 
 export interface UserProfileService {
-    getProfile(user: Pick<UserDocument, "username" | "exp" | "streaks">): UserProfile;
+    getProfile(user: Pick<UserDocument, "username" | "exp" | "streaks" | "lastActiveDate">): UserProfile;
     updateProfile(userId: string, body: unknown): Promise<UserProfile>;
 }
 
 export const unavailableProfileFields = ["fullname"] as const;
 
-const toUserProfile = (user: Pick<UserDocument, "username" | "exp" | "streaks">): UserProfile => ({
-    username: user.username,
-    fullname: null,
-    exp: user.exp,
-    streaks: user.streaks,
-});
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+export const isPlayStreakExpired = (
+    lastActiveDate: Date | null | undefined,
+    now = new Date(),
+): boolean => {
+    if (!lastActiveDate) return false;
+
+    const lastActiveDay = Date.UTC(
+        lastActiveDate.getUTCFullYear(),
+        lastActiveDate.getUTCMonth(),
+        lastActiveDate.getUTCDate(),
+    );
+    const currentDay = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+    return currentDay - lastActiveDay > DAY_MS;
+};
+
+const toUserProfile = (user: Pick<UserDocument, "username" | "exp" | "streaks" | "lastActiveDate">): UserProfile => {
+    const streakExpired = isPlayStreakExpired(user.lastActiveDate);
+    return {
+        username: user.username,
+        fullname: null,
+        exp: user.exp,
+        streaks: streakExpired ? 0 : user.streaks,
+        streakExpired,
+    };
+};
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
     typeof value === "object" && value !== null && !Array.isArray(value);
@@ -68,7 +90,7 @@ const defaultRepository: UserProfileRepository = {
         userId,
         { $set: { username } },
         { new: true, runValidators: true },
-    ).select("username exp streaks").exec(),
+    ).select("username exp streaks lastActiveDate").exec(),
 };
 
 export const createUserProfileService = (
