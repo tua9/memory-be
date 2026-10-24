@@ -1,59 +1,96 @@
-import mongoose, { type Document } from "mongoose";
+import mongoose, { type Document, type Types } from "mongoose";
+import {
+    CONFIGURED_GAME_NAMES,
+    GAME_MODES,
+    GAME_RESULTS,
+    type ConfiguredGameName,
+    type GameResult,
+} from "../config/games.js";
+import type { RoundRewards, StoredRoundRules } from "../services/roundSettlement.service.js";
 
-// Định nghĩa các loại game được phép trong hệ thống
-export const ALLOWED_GAME_NAMES = ["card", "image", "number"] as const;
-export type GameName = (typeof ALLOWED_GAME_NAMES)[number];
+// memorizing → recalling → completed; ván quá hạn chuyển sang expired
+export const GAME_SESSION_STATUSES = ["memorizing", "recalling", "completed", "expired"] as const;
+export type GameSessionStatus = (typeof GAME_SESSION_STATUSES)[number];
 
-export interface GameSessionDocument extends Document {
-    userId: string;
-    gameName: GameName;
-    time: number;
-    score: number;
-    date: Date;
+// Một ván chơi. Mọi mốc thời gian và kết quả đều do server ghi, client không gửi lên.
+export interface GameSessionData {
+    userId: Types.ObjectId;
+    gameName: ConfiguredGameName;
+    status: GameSessionStatus;
+    rules: StoredRoundRules;
+    // Đáp án theo đúng thứ tự. Không được trả về mặc định, phải chọn "+items" khi query.
+    items: string[];
+    // Câu trả lời theo vị trí, null là bỏ trống; chỉ có khi đã nộp bài
+    answers?: (string | null)[];
+    startedAt: Date;
+    recallStartedAt: Date | null;
+    completedAt: Date | null;
+    memorizeSec: number | null;
+    recallSec: number | null;
+    correctItems: number | null;
+    accuracy: number | null;
+    result: GameResult | null;
+    rewards: RoundRewards | null;
+    // Hạn tự xoá của ván chưa nộp; bỏ đi khi ván hoàn thành
+    expiresAt?: Date;
 }
+
+export interface GameSessionDocument extends Document, GameSessionData {}
+
+const roundRulesSchema = new mongoose.Schema<StoredRoundRules>(
+    {
+        mode: { type: String, enum: GAME_MODES, required: true },
+        // null với ván tự chọn số lượng
+        gameLevel: { type: Number, default: null, min: 1 },
+        totalItems: { type: Number, required: true, min: 1 },
+        memorizeLimitSec: { type: Number, required: true, min: 1 },
+        recallLimitSec: { type: Number, required: true, min: 1 },
+        passAccuracy: { type: Number, required: true, min: 0, max: 1 },
+    },
+    { _id: false },
+);
 
 const gameSessionSchema = new mongoose.Schema<GameSessionDocument>(
     {
         userId: {
-            type: String,
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "user",
             required: true,
-            trim: true,
-            index: true,
         },
         gameName: {
             type: String,
             required: true,
-            enum: ALLOWED_GAME_NAMES, // Mongoose tự động kiểm tra enum
-            index: true,
+            enum: CONFIGURED_GAME_NAMES,
         },
-        time: {
-            type: Number,
+        status: {
+            type: String,
             required: true,
-            min: 0,
+            enum: GAME_SESSION_STATUSES,
+            default: "memorizing",
         },
-        score: {
-            type: Number,
-            default: 0,
-            min: 0,
-        },
-        date: {
-            type: Date,
-            default: Date.now,
-            index: true,
-        },
+        rules: { type: roundRulesSchema, required: true },
+        items: { type: [String], required: true, select: false },
+        answers: { type: [String], default: undefined },
+        startedAt: { type: Date, required: true },
+        recallStartedAt: { type: Date, default: null },
+        completedAt: { type: Date, default: null },
+        memorizeSec: { type: Number, default: null, min: 0 },
+        recallSec: { type: Number, default: null, min: 0 },
+        correctItems: { type: Number, default: null, min: 0 },
+        accuracy: { type: Number, default: null, min: 0, max: 1 },
+        result: { type: String, enum: GAME_RESULTS, default: null },
+        // Bản chụp phần thưởng lúc nộp bài, chỉ ghi một lần nên không cần schema chi tiết
+        rewards: { type: mongoose.Schema.Types.Mixed, default: null },
+        expiresAt: { type: Date },
     },
-    {
-        timestamps: false,
-        toJSON: {
-            transform: (_doc, ret: Record<string, unknown>) => {
-                ret.id = (ret._id as { toString(): string }).toString();
-                delete ret._id;
-                delete ret.__v;
-                return ret;
-            },
-        },
-    },
+    { collection: "game_sessions" },
 );
+
+// Ván chưa nộp tự bị xoá khi tới expiresAt; ván đã hoàn thành không còn trường này nên được giữ lại
+gameSessionSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
+// Lịch sử ván của một người chơi, mới nhất trước, có hoặc không lọc theo game
+gameSessionSchema.index({ userId: 1, status: 1, completedAt: -1 });
+gameSessionSchema.index({ userId: 1, gameName: 1, status: 1, completedAt: -1 });
 
 const GameSession = mongoose.model<GameSessionDocument>("game_session", gameSessionSchema);
 export default GameSession;

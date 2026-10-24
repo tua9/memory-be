@@ -98,13 +98,18 @@ test("profile reads expose only profile fields and updates persist the allowed u
         };
 
         assert.equal(initialResponse.status, 200);
+        // Tài khoản chưa chơi ván nào: tiến độ mặc định
         assert.deepEqual(initialBody.data.profile, {
             username: "Original Name",
             fullname: null,
-            exp: null,
-            streaks: null,
+            exp: 0,
+            level: { level: 1, expIntoLevel: 0, expForNextLevel: 100 },
+            streaks: 0,
+            longestStreak: 0,
+            streakExpired: false,
+            playedToday: false,
         });
-        assert.deepEqual(initialBody.data.unavailableFields, ["fullname", "exp", "streaks"]);
+        assert.deepEqual(initialBody.data.unavailableFields, ["fullname"]);
         assert.equal("email" in initialBody.data.profile, false);
         assert.equal("passwordHash" in initialBody.data.profile, false);
         assert.equal("role" in initialBody.data.profile, false);
@@ -130,6 +135,37 @@ test("profile reads expose only profile fields and updates persist the allowed u
         };
         assert.equal(persistedBody.data.profile.username, "Updated Name");
     });
+});
+
+test("profile shows EXP, level and streak status from game progress", () => {
+    const { getProfile } = createUserProfileService();
+    const progress = {
+        exp: 350,
+        currentStreak: 4,
+        longestStreak: 9,
+        lastPlayedDate: "2026-10-23",
+        totalGames: 20,
+        totalPlayTimeSec: 3600,
+    };
+    const user = { username: "Player", progress } as Pick<UserDocument, "username" | "progress">;
+    const at = (dateTime: string) => new Date(`${dateTime}+07:00`);
+
+    const sameDay = getProfile(user, at("2026-10-23T21:00:00"));
+    assert.equal(sameDay.exp, 350);
+    assert.deepEqual(sameDay.level, { level: 3, expIntoLevel: 50, expForNextLevel: 300 });
+    assert.equal(sameDay.streaks, 4);
+    assert.equal(sameDay.playedToday, true);
+    assert.equal(sameDay.streakExpired, false);
+
+    const nextDay = getProfile(user, at("2026-10-24T08:00:00"));
+    assert.equal(nextDay.streaks, 4);
+    assert.equal(nextDay.playedToday, false);
+    assert.equal(nextDay.streakExpired, false);
+
+    const missedDay = getProfile(user, at("2026-10-25T08:00:00"));
+    assert.equal(missedDay.streaks, 0);
+    assert.equal(missedDay.longestStreak, 9);
+    assert.equal(missedDay.streakExpired, true);
 });
 
 test("empty, invalid, and protected-field updates are rejected without persistence", async () => {
