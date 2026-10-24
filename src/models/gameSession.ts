@@ -1,7 +1,7 @@
 import mongoose, { type Document } from "mongoose";
 
 // Định nghĩa các loại game được phép trong hệ thống
-export const ALLOWED_GAME_NAMES = ["card", "image", "number"] as const;
+export const ALLOWED_GAME_NAMES = ["card", "image", "number", "word"] as const;
 export type GameName = (typeof ALLOWED_GAME_NAMES)[number];
 
 export interface GameSessionDocument extends Document {
