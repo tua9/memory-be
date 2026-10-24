@@ -45,3 +45,9 @@ export const GAME_CONFIGS = {
 
 export type ConfiguredGameName = keyof typeof GAME_CONFIGS;
 export const CONFIGURED_GAME_NAMES = Object.keys(GAME_CONFIGS) as ConfiguredGameName[];
+
+// Cho phép chuyển phase hoặc nộp bài trễ hơn hạn một chút, bù độ trễ mạng khi frontend tự chuyển lúc hết giờ
+export const PHASE_GRACE_SEC = 30;
+
+// Ván bỏ dở (chưa nộp bài) được MongoDB tự xoá sau khoảng thời gian này
+export const UNFINISHED_ROUND_TTL_SEC = 24 * 60 * 60;
