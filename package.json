@@ -9,7 +9,7 @@
         "build": "tsc -p tsconfig.bundle.json && esbuild src/server.ts --bundle --platform=node --format=esm --packages=external --sourcemap --outfile=dist/server.js",
         "start": "node dist/server.js",
         "typecheck": "tsc -p tsconfig.bundle.json",
-        "test": "tsx --test test/auth.test.ts"
+        "test": "tsx --test \"test/**/*.test.ts\""
     },
     "keywords": [],
     "author": "",
