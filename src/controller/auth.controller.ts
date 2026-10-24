@@ -3,6 +3,7 @@ import { StatusCodes } from "http-status-codes";
 import { env } from "../config/env";
 import { asyncHandler } from "../middlewares/asyncHandler";
 import { authService, type AuthTokens } from "../services/user.service";
+import ApiError from "../utils/ApiError";
 
 const baseCookieOptions: CookieOptions = {
     httpOnly: true,
@@ -43,8 +44,26 @@ export const signIn: RequestHandler = asyncHandler(async (request, response) => 
     });
 });
 
+const clearAuthCookies = (response: Response): void => {
+    response.clearCookie("accessToken", baseCookieOptions);
+    response.clearCookie("refreshToken", baseCookieOptions);
+};
+
 export const refresh: RequestHandler = asyncHandler(async (request, response) => {
-    const tokens = await authService.refreshToken(request.cookies?.refreshToken);
+    let tokens: AuthTokens;
+    try {
+        tokens = await authService.refreshToken(request.cookies?.refreshToken);
+    } catch (error) {
+        // Phiên không dùng được nữa (token sai, hết hạn, bị thu hồi hoặc tài khoản bị khoá): xoá cookie,
+        // nếu không trình duyệt cứ gửi lại cookie cũ và mọi request sau đều phải thử refresh rồi thất bại
+        if (
+            error instanceof ApiError
+            && (error.statusCode === StatusCodes.UNAUTHORIZED || error.statusCode === StatusCodes.FORBIDDEN)
+        ) {
+            clearAuthCookies(response);
+        }
+        throw error;
+    }
     setAuthCookies(response, tokens);
     response.status(StatusCodes.OK).json({
         status: "success",
@@ -55,8 +74,7 @@ export const refresh: RequestHandler = asyncHandler(async (request, response) =>
 
 export const signOut: RequestHandler = asyncHandler(async (request, response) => {
     await authService.signOut(request.cookies?.refreshToken);
-    response.clearCookie("accessToken", baseCookieOptions);
-    response.clearCookie("refreshToken", baseCookieOptions);
+    clearAuthCookies(response);
     response.status(StatusCodes.OK).json({
         status: "success",
         message: "Sign out successful",

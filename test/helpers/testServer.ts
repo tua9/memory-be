@@ -1,5 +1,6 @@
 import { once } from "node:events";
 import type { AddressInfo } from "node:net";
+import cookieParser from "cookie-parser";
 import express, { type RequestHandler, type Router } from "express";
 import { StatusCodes } from "http-status-codes";
 import { errorHandlingMiddleware } from "../../src/middlewares/errorHandlingMiddleware.js";
@@ -18,10 +19,11 @@ export const rejectAuthentication: RequestHandler = (_request, _response, next) 
     next(new ApiError(StatusCodes.UNAUTHORIZED, "Unauthorized"));
 };
 
-// Chạy router thật trên một cổng ngẫu nhiên, dùng errorHandlingMiddleware như app thật
+// Chạy router thật trên một cổng ngẫu nhiên, dùng cookieParser và errorHandlingMiddleware như app thật
 export const startTestServer = async (mountPath: string, ...routers: Router[]) => {
     const app = express();
     app.use(express.json());
+    app.use(cookieParser());
     app.use(mountPath, ...routers);
     app.use(errorHandlingMiddleware);
 
