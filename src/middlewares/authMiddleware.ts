@@ -1,4 +1,4 @@
-import type { RequestHandler } from "express";
+import type { Request, RequestHandler } from "express";
 import { StatusCodes } from "http-status-codes";
 import { env } from "../config/env";
 import User, { type UserDocument } from "../models/user";
@@ -18,12 +18,13 @@ export const AUTH_ERROR_CODES = {
   TOKEN_EXPIRED: "TOKEN_EXPIRED",
 } as const;
 
+// Tạm thời lấy accessToken từ cookie hoặc header Authorization
+const readAccessToken = (request: Request): unknown =>
+  request.cookies?.accessToken || request.headers?.authorization?.split(" ")[1];
+
 export const protectedRoute: RequestHandler = asyncHandler(
   async (request, _response, next) => {
-    // Tạm thời lấy accessToken từ cookie hoặc header Authorization
-    const accessToken: unknown =
-      request.cookies?.accessToken ||
-      request.headers?.authorization?.split(" ")[1];
+    const accessToken = readAccessToken(request);
     if (typeof accessToken !== "string" || !accessToken) {
       throw new ApiError(StatusCodes.UNAUTHORIZED, "Unauthorized");
     }
@@ -79,3 +80,27 @@ export const protectedRoute: RequestHandler = asyncHandler(
     next();
   },
 );
+
+// Cho API dùng chung giữa khách và người đã đăng nhập:
+// - Không có phiên nào: coi là khách, request.user để trống.
+// - Có access token: xác thực như protectedRoute (token hết hạn vẫn trả 401 để frontend refresh).
+// - Chỉ còn refresh token (access token hết hạn nên trình duyệt đã xoá cookie): trả 401 TOKEN_EXPIRED
+//   để frontend refresh rồi gọi lại, thay vì lặng lẽ coi người đã đăng nhập là khách.
+export const optionalAuthentication: RequestHandler = (request, response, next) => {
+  if (readAccessToken(request)) {
+    protectedRoute(request, response, next);
+    return;
+  }
+  if (request.cookies?.refreshToken) {
+    next(
+      new ApiError(
+        StatusCodes.UNAUTHORIZED,
+        "Access token expired",
+        [],
+        AUTH_ERROR_CODES.TOKEN_EXPIRED,
+      ),
+    );
+    return;
+  }
+  next();
+};

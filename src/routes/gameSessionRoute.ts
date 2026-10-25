@@ -1,21 +1,25 @@
-import express from "express";
-import { protectedRoute } from "../middlewares/authMiddleware.js";
+import express, { type RequestHandler } from "express";
 import { createGameSessionController } from "../controller/gameSession.controller.js";
-import type { GameSessionService } from "../services/gameSession.service.js";
-import { gameSessionService } from "../services/gameSession.service.js";
+import { protectedRoute } from "../middlewares/authMiddleware.js";
+import {
+  gameSessionService,
+  type GameSessionService,
+} from "../services/gameSession.service.js";
 
 export const createGameSessionRouter = (
-	authentication: express.RequestHandler = protectedRoute,
-	service: GameSessionService = gameSessionService,
+  authentication: RequestHandler = protectedRoute,
+  service: GameSessionService = gameSessionService,
 ) => {
-	const router = express.Router();
-	const controller = createGameSessionController(service);
+  const router = express.Router();
+  const controller = createGameSessionController(service);
 
-	router.use(authentication);
-	router.post("/", controller.createSession);
-	router.get("/user/:userId", controller.getUserHistory);
+  // Gắn xác thực theo từng route thay vì router.use: router này chỉ xử lý đúng các route của nó,
+  // các router khác dùng chung prefix /game-sessions không bị xác thực thêm lần nữa
+  router.post("/", authentication, controller.startRound);
+  router.post("/:sessionId/recall", authentication, controller.startRecall);
+  router.post("/:sessionId/submit", authentication, controller.submitRound);
 
-	return router;
+  return router;
 };
 
 export default createGameSessionRouter();
