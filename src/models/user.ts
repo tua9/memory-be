@@ -16,6 +16,9 @@ export interface UserDocument extends Document {
     username: string;
     email: string;
     passwordHash: string | null;
+    exp: number;
+    streaks: number;
+    lastActiveDate: Date | null;
     status: UserStatus;
     role: UserRole;
     progress: UserProgress;
@@ -54,6 +57,9 @@ const userSchema = new mongoose.Schema<UserDocument>(
             index: true,
         },
         passwordHash: { type: String, default: null },
+        exp: { type: Number, min: 0, default: 0 },
+        streaks: { type: Number, min: 0, validate: Number.isInteger, default: 0 },
+        lastActiveDate: { type: Date, default: null },
         status: {
             type: String,
             enum: ["active", "inactive", "banned"],
