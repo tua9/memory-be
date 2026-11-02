@@ -61,6 +61,13 @@ export interface RoundSettlement {
     userProgress: UserProgress;
 }
 
+export interface GuestRoundSettlement {
+    graded: GradedRound;
+    memorizeSec: number;
+    recallSec: number;
+    unlockedLevel: { before: number; after: number };
+}
+
 export const createInitialGameProgress = (): GameProgress => ({
     unlockedLevel: 1,
     stats: {
@@ -108,19 +115,24 @@ export const compareAnswers = (
         return { expected, answer, correct: answer === expected };
     });
 
-// Tính toàn bộ kết quả của một ván đã nộp cùng tiến độ mới. Hàm thuần: việc đọc và ghi DB do service đảm nhận.
-export const settleRound = (input: SettleRoundInput, current: CurrentProgress): RoundSettlement => {
-    const { rules } = input;
-    const { gameProgress, userProgress } = current;
-
+// Chấm điểm và đo thời gian: phần chung của ván người đăng nhập và ván của khách
+const gradeSubmittedRound = (input: SettleRoundInput) => {
     const perItem = compareAnswers(input.items, input.answers);
-    const graded = gradeRound(rules, perItem.filter((item) => item.correct).length);
+    const graded = gradeRound(input.rules, perItem.filter((item) => item.correct).length);
     const { memorizeSec, recallSec } = measureRoundTime(
-        rules,
+        input.rules,
         input.startedAt,
         input.recallStartedAt,
         input.completedAt,
     );
+    return { perItem, graded, memorizeSec, recallSec };
+};
+
+// Tính toàn bộ kết quả của một ván đã nộp cùng tiến độ mới. Hàm thuần: việc đọc và ghi DB do service đảm nhận.
+export const settleRound = (input: SettleRoundInput, current: CurrentProgress): RoundSettlement => {
+    const { rules } = input;
+    const { gameProgress, userProgress } = current;
+    const { perItem, graded, memorizeSec, recallSec } = gradeSubmittedRound(input);
 
     const { records, newRecords } = applyRoundToRecords(gameProgress.records, {
         mode: rules.mode,
@@ -173,5 +185,24 @@ export const settleRound = (input: SettleRoundInput, current: CurrentProgress): 
         },
         gameProgress: { unlockedLevel, stats, records },
         userProgress: nextUserProgress,
+    };
+};
+
+// Ván của khách: chấm điểm và mở level giống hệt người đăng nhập, nhưng không có EXP, kỷ lục hay streak
+export const settleGuestRound = (input: SettleRoundInput, unlockedLevel: number): GuestRoundSettlement => {
+    const { rules } = input;
+    const { graded, memorizeSec, recallSec } = gradeSubmittedRound(input);
+    return {
+        graded,
+        memorizeSec,
+        recallSec,
+        unlockedLevel: {
+            before: unlockedLevel,
+            after: getUnlockedLevelAfterRound(
+                { gameName: input.gameName, mode: rules.mode, gameLevel: rules.gameLevel },
+                graded.result,
+                unlockedLevel,
+            ),
+        },
     };
 };

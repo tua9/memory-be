@@ -5,13 +5,16 @@ export interface SeedImageItem {
   title: string;
 }
 
-const buildUrl = (id: string) =>
+// Link thẳng tới CDN của Unsplash theo id ảnh
+export const buildUrl = (id: string) =>
   `https://images.unsplash.com/${id}?auto=format&fit=crop&w=400&h=400&q=80`;
 
 /**
- * Kho dữ liệu 190 ảnh chất lượng cao chia thành 10 cấp độ độc lập.
- * - Trong MỖI level: Đầy đủ các chủ đề trộn lẫn (động vật, ẩm thực, xe cộ, thiên nhiên, công nghệ, thời trang, kiến trúc, nghệ thuật...).
- * - GIỮA các level: Hoàn toàn khác nhau 100%, Level 2 không bao giờ dùng lại ảnh của Level 1, Level 3 không dùng lại ảnh của Level 1 và 2,...
+ * Kho 190 ảnh của game hình, chia theo 10 cấp độ; engine (src/games/image.ts) rút ảnh của ván từ đây.
+ * - Trong MỖI level: nhiều chủ đề trộn lẫn (động vật, ẩm thực, xe cộ, thiên nhiên, công nghệ, thời trang, kiến trúc, nghệ thuật...),
+ *   không có ảnh trùng nhau.
+ * - GIỮA các level: một số ảnh được dùng lại ở level khác.
+ * - Mỗi level cần ít nhất số ảnh của level đó trong GAME_CONFIGS.image.
  */
 export const SEED_IMAGES: SeedImageItem[] = [
   // ===================== CẤP ĐỘ 1 (6 ảnh / ván, kho 10 ảnh đa chủ đề) =====================

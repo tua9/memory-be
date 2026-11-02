@@ -5,11 +5,13 @@ import { StatusCodes } from "http-status-codes";
 import { createGameCatalogRouter } from "../src/routes/gameCatalogRoute.js";
 import {
     buildGameCatalog,
+    fromStoredProgress,
     type GameCatalogItem,
     type GameCatalogService,
     type StoredGameProgress,
 } from "../src/services/gameCatalog.service.js";
 import { createInitialGameProgress } from "../src/services/roundSettlement.service.js";
+import type { PlayerRef } from "../src/utils/request.js";
 import { TEST_USER_ID, acceptAuthentication, startTestServer } from "./helpers/testServer.js";
 
 const progress = (overrides: Partial<StoredGameProgress>): StoredGameProgress => ({
@@ -17,7 +19,7 @@ const progress = (overrides: Partial<StoredGameProgress>): StoredGameProgress =>
     ...overrides,
 });
 
-test("guests get the rules of every game without player progress", () => {
+test("guests who have not played get the rules of every game without player progress", () => {
     const [card, image] = buildGameCatalog(null);
 
     assert.equal(card.gameName, "card");
@@ -40,11 +42,13 @@ test("guests get the rules of every game without player progress", () => {
 
 test("players get their unlocked level, best level and played count per game", () => {
     const [card, image] = buildGameCatalog({
-        card: progress({
-            unlockedLevel: 3,
-            records: { bestLevel: 2, fastestMemorizeSecByLevel: {} },
-            stats: { ...createInitialGameProgress().stats, played: 7 },
-        }),
+        card: fromStoredProgress(
+            progress({
+                unlockedLevel: 3,
+                records: { bestLevel: 2, fastestMemorizeSecByLevel: {} },
+                stats: { ...createInitialGameProgress().stats, played: 7 },
+            }),
+        ),
     });
 
     assert.deepEqual(card.player, { unlockedLevel: 3, bestLevel: 2, played: 7 });
@@ -53,15 +57,15 @@ test("players get their unlocked level, best level and played count per game", (
 });
 
 test("an unlocked level above the current max level is capped", () => {
-    const [card] = buildGameCatalog({ card: progress({ unlockedLevel: 99 }) });
+    const [card] = buildGameCatalog({ card: fromStoredProgress(progress({ unlockedLevel: 99 })) });
     assert.equal(card.player?.unlockedLevel, 10);
 });
 
 const createRecordingService = () => {
-    const calls: (string | null)[] = [];
+    const calls: (PlayerRef | null)[] = [];
     const service: GameCatalogService = {
-        listGames: async (userId) => {
-            calls.push(userId);
+        listGames: async (player) => {
+            calls.push(player);
             return [] as GameCatalogItem[];
         },
     };
@@ -69,6 +73,7 @@ const createRecordingService = () => {
 };
 
 const asGuest: RequestHandler = (_request, _response, next) => next();
+const GUEST_ID = "abcdefghijklmnopqrstuvwxyz012345";
 
 test("the game list works for guests and for signed-in players", async () => {
     const guest = createRecordingService();
@@ -79,10 +84,13 @@ test("the game list works for guests and for signed-in players", async () => {
         const guestResponse = await fetch(guestServer.baseUrl);
         assert.equal(guestResponse.status, StatusCodes.OK);
         assert.deepEqual(await guestResponse.json(), { status: "success", data: { games: [] } });
-        assert.deepEqual(guest.calls, [null]);
+        // Khách đã chơi có cookie: nhận level đã mở tạm thời; cookie sai định dạng bị bỏ qua
+        await fetch(guestServer.baseUrl, { headers: { Cookie: `guestId=${GUEST_ID}` } });
+        await fetch(guestServer.baseUrl, { headers: { Cookie: "guestId=not-a-guest-id" } });
+        assert.deepEqual(guest.calls, [null, { guestId: GUEST_ID }, null]);
 
         assert.equal((await fetch(playerServer.baseUrl)).status, StatusCodes.OK);
-        assert.deepEqual(player.calls, [TEST_USER_ID]);
+        assert.deepEqual(player.calls, [{ userId: TEST_USER_ID }]);
     } finally {
         await guestServer.close();
         await playerServer.close();
