@@ -177,7 +177,7 @@ const listHistory: GameHistoryService["listHistory"] = async (userId, rawQuery) 
 };
 
 const getSessionDetail: GameHistoryService["getSessionDetail"] = async (userId, sessionId) => {
-    const session = await findOwnSession(userId, sessionId);
+    const session = await findOwnSession({ userId }, sessionId);
     if (session.status === "completed") {
         return toCompletedView(session);
     }

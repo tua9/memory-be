@@ -1,13 +1,14 @@
 import express, { type RequestHandler } from "express";
 import { createGameSessionController } from "../controller/gameSession.controller.js";
-import { protectedRoute } from "../middlewares/authMiddleware.js";
+import { optionalAuthentication } from "../middlewares/authMiddleware.js";
 import {
   gameSessionService,
   type GameSessionService,
 } from "../services/gameSession.service.js";
 
+// Khách cũng chơi được: không đăng nhập thì ván gắn với cookie khách thay vì tài khoản
 export const createGameSessionRouter = (
-  authentication: RequestHandler = protectedRoute,
+  authentication: RequestHandler = optionalAuthentication,
   service: GameSessionService = gameSessionService,
 ) => {
   const router = express.Router();
