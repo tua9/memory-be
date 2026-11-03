@@ -7,6 +7,7 @@ import {
     createInitialGameProgress,
     createInitialUserProgress,
     measureRoundTime,
+    settleGuestRound,
     settleRound,
     type SettleRoundInput,
     type StoredRoundRules,
@@ -163,4 +164,28 @@ test("the current progress is not mutated", () => {
     const snapshot = structuredClone(current);
     settleRound(roundInput(), current);
     assert.deepEqual(current, snapshot);
+});
+
+test("guest rounds are graded like player rounds and unlock the next level without rewards", () => {
+    const input = roundInput({ answers: ["AS", "2H", null, "4C", "5S"] });
+    const guest = settleGuestRound(input, 1);
+    const player = settleRound(input, freshProgress());
+    assert.deepEqual(guest.graded, player.graded);
+    assert.equal(guest.memorizeSec, player.memorizeSec);
+    assert.equal(guest.recallSec, player.recallSec);
+    assert.equal("rewards" in guest, false);
+    // Chưa đúng hết thì chưa mở level mới
+    assert.deepEqual(guest.unlockedLevel, { before: 1, after: 1 });
+
+    assert.deepEqual(settleGuestRound(roundInput(), 1).unlockedLevel, { before: 1, after: 2 });
+});
+
+test("replaying an already unlocked level does not unlock another one", () => {
+    // Đã mở tới level 3 mà chơi lại level 1 đúng hết: vẫn ở level 3
+    assert.deepEqual(settleGuestRound(roundInput(), 3).unlockedLevel, { before: 3, after: 3 });
+    const replay = settleRound(roundInput(), {
+        ...freshProgress(),
+        gameProgress: { ...createInitialGameProgress(), unlockedLevel: 3 },
+    });
+    assert.deepEqual(replay.rewards.unlockedLevel, { before: 3, after: 3 });
 });

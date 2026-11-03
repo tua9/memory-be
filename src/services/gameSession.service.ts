@@ -1,6 +1,7 @@
 import { StatusCodes } from "http-status-codes";
 import mongoose, { type Types } from "mongoose";
 import {
+  GUEST_PROGRESS_TTL_SEC,
   PHASE_GRACE_SEC,
   UNFINISHED_ROUND_TTL_SEC,
   type ConfiguredGameName,
@@ -16,16 +17,19 @@ import GameSession, {
   type GameSessionData,
   type GameSessionStatus,
 } from "../models/gameSession.js";
+import GuestProgress, { type GuestProgressData } from "../models/guestProgress.js";
 import User, { type UserProgress } from "../models/user.js";
 import UserGameProgress, {
   type GameProgress,
 } from "../models/userGameProgress.js";
 import ApiError from "../utils/ApiError.js";
+import type { PlayerRef } from "../utils/request.js";
 import { parseGameName, resolveRoundRules } from "./gameRules.service.js";
 import {
   compareAnswers,
   createInitialGameProgress,
   createInitialUserProgress,
+  settleGuestRound,
   settleRound,
   type RoundRewards,
   type StoredRoundRules,
@@ -70,14 +74,17 @@ export interface CompletedRoundView extends RoundView {
   startedAt: Date;
   completedAt: Date;
   result: RoundResultView;
-  rewards: RoundRewards;
+  // null với ván của khách: không có EXP, kỷ lục hay streak
+  rewards: RoundRewards | null;
+  // Level đã mở trước và sau ván, có ở cả ván của người đăng nhập lẫn của khách
+  unlockedLevel: { before: number; after: number };
 }
 
 export interface GameSessionService {
-  startRound(userId: string, body: unknown): Promise<StartedRoundView>;
-  startRecall(userId: string, sessionId: string): Promise<RecallRoundView>;
+  startRound(player: PlayerRef, body: unknown): Promise<StartedRoundView>;
+  startRecall(player: PlayerRef, sessionId: string): Promise<RecallRoundView>;
   submitRound(
-    userId: string,
+    player: PlayerRef,
     sessionId: string,
     body: unknown,
   ): Promise<CompletedRoundView>;
@@ -129,9 +136,15 @@ const parseBody = (
   return body;
 };
 
+// Điều kiện lọc ván theo chủ sở hữu: tài khoản hoặc khách
+const ownerOf = (player: PlayerRef) =>
+  "userId" in player
+    ? { userId: player.userId }
+    : { guestId: player.guestId };
+
 // Ván của người khác cũng trả 404 để không lộ là ván đó có tồn tại
 export const findOwnSession = async (
-  userId: string,
+  player: PlayerRef,
   sessionId: string,
 ): Promise<GameSessionRecord> => {
   const notFound = new ApiError(
@@ -141,7 +154,10 @@ export const findOwnSession = async (
   if (!OBJECT_ID_PATTERN.test(sessionId)) {
     throw notFound;
   }
-  const session = await GameSession.findOne({ _id: sessionId, userId })
+  const session = await GameSession.findOne({
+    _id: sessionId,
+    ...ownerOf(player),
+  })
     .select("+items")
     .lean<GameSessionRecord>()
     .exec();
@@ -149,6 +165,24 @@ export const findOwnSession = async (
     throw notFound;
   }
   return session;
+};
+
+// Level cao nhất đã mở: của tài khoản, hoặc tiến độ tạm của khách; chưa chơi thì là level 1
+const findUnlockedLevel = async (
+  player: PlayerRef,
+  gameName: ConfiguredGameName,
+): Promise<number> => {
+  const progress =
+    "userId" in player
+      ? await UserGameProgress.findOne({ userId: player.userId, gameName })
+          .select("unlockedLevel")
+          .lean<Pick<GameProgress, "unlockedLevel">>()
+          .exec()
+      : await GuestProgress.findOne({ guestId: player.guestId, gameName })
+          .select("unlockedLevel")
+          .lean<Pick<GuestProgressData, "unlockedLevel">>()
+          .exec();
+  return progress?.unlockedLevel ?? 1;
 };
 
 const expireSession = async (
@@ -168,17 +202,10 @@ export const toRoundView = (session: GameSessionRecord): RoundView => ({
   rules: session.rules,
 });
 
-// Kết quả của một ván đã hoàn thành; thiếu trường nào nghĩa là dữ liệu hỏng chứ không phải lỗi của người dùng
-export const requireCompletedResult = (session: GameSessionRecord) => {
-  const {
-    completedAt,
-    memorizeSec,
-    recallSec,
-    correctItems,
-    accuracy,
-    result,
-    rewards,
-  } = session;
+// Kết quả chấm của một ván đã hoàn thành; thiếu trường nào nghĩa là dữ liệu hỏng chứ không phải lỗi của người dùng
+const requireGradedResult = (session: GameSessionRecord) => {
+  const { completedAt, memorizeSec, recallSec, correctItems, accuracy, result } =
+    session;
   if (
     session.status !== "completed" ||
     !completedAt ||
@@ -186,20 +213,20 @@ export const requireCompletedResult = (session: GameSessionRecord) => {
     recallSec === null ||
     correctItems === null ||
     accuracy === null ||
-    result === null ||
-    !rewards
+    result === null
   ) {
     throw new Error("Completed game session is missing its results");
   }
-  return {
-    completedAt,
-    memorizeSec,
-    recallSec,
-    correctItems,
-    accuracy,
-    result,
-    rewards,
-  };
+  return { completedAt, memorizeSec, recallSec, correctItems, accuracy, result };
+};
+
+// Ván của người đã đăng nhập: có thêm phần thưởng
+export const requireCompletedResult = (session: GameSessionRecord) => {
+  const graded = requireGradedResult(session);
+  if (!session.rewards) {
+    throw new Error("Completed game session is missing its results");
+  }
+  return { ...graded, rewards: session.rewards };
 };
 
 const toRecallView = (
@@ -225,15 +252,15 @@ const toRecallView = (
 export const toCompletedView = (
   session: GameSessionRecord,
 ): CompletedRoundView => {
-  const {
-    completedAt,
-    memorizeSec,
-    recallSec,
-    correctItems,
-    accuracy,
-    result,
-    rewards,
-  } = requireCompletedResult(session);
+  const { completedAt, memorizeSec, recallSec, correctItems, accuracy, result } =
+    requireGradedResult(session);
+  // Ván của khách không có phần thưởng nên level đã mở được ghi riêng
+  const unlockedLevel = session.guestId
+    ? session.guestUnlockedLevel
+    : session.rewards?.unlockedLevel;
+  if (!unlockedLevel) {
+    throw new Error("Completed game session is missing its results");
+  }
 
   const engine = getGameEngine(session.gameName);
   const perItem = compareAnswers(session.items, session.answers ?? []).map(
@@ -257,20 +284,18 @@ export const toCompletedView = (
       recallSec,
       perItem,
     },
-    rewards,
+    rewards: session.rewards,
+    unlockedLevel,
   };
 };
 
 const startRound: GameSessionService["startRound"] = async (
-  userId,
+  player,
   rawBody,
 ) => {
   const body = parseBody(rawBody, START_ROUND_FIELDS);
   const gameName = parseGameName(body.gameName);
-  const progress = await UserGameProgress.findOne({ userId, gameName })
-    .select("unlockedLevel")
-    .lean<Pick<GameProgress, "unlockedLevel">>()
-    .exec();
+  // gameLevel trong body cho phép chơi lại level cũ; level chưa mở bị resolveRoundRules từ chối
   const {
     mode,
     gameLevel,
@@ -278,7 +303,11 @@ const startRound: GameSessionService["startRound"] = async (
     memorizeLimitSec,
     recallLimitSec,
     passAccuracy,
-  } = resolveRoundRules(gameName, body, progress?.unlockedLevel ?? 1);
+  } = resolveRoundRules(
+    gameName,
+    body,
+    await findUnlockedLevel(player, gameName),
+  );
   const rules: StoredRoundRules = {
     mode,
     gameLevel,
@@ -289,10 +318,10 @@ const startRound: GameSessionService["startRound"] = async (
   };
 
   const engine = getGameEngine(gameName);
-  const items = engine.generateItems(totalItems);
+  const items = engine.generateItems(totalItems, gameLevel);
   const startedAt = new Date();
   const session = await GameSession.create({
-    userId,
+    ...ownerOf(player),
     gameName,
     status: "memorizing",
     rules,
@@ -312,10 +341,10 @@ const startRound: GameSessionService["startRound"] = async (
 };
 
 const startRecall: GameSessionService["startRecall"] = async (
-  userId,
+  player,
   sessionId,
 ) => {
-  const session = await findOwnSession(userId, sessionId);
+  const session = await findOwnSession(player, sessionId);
   const engine = getGameEngine(session.gameName);
   // Gọi lại khi đã ở phase nhớ lại (ví dụ mạng lỗi): trả lại đúng phase hiện tại
   if (session.status === "recalling") {
@@ -344,50 +373,27 @@ const startRecall: GameSessionService["startRecall"] = async (
     .lean<GameSessionRecord>()
     .exec();
   // Không cập nhật được nghĩa là một yêu cầu khác vừa chuyển phase trước; đọc lại trạng thái mới nhất
-  const current = updated ?? (await findOwnSession(userId, sessionId));
+  const current = updated ?? (await findOwnSession(player, sessionId));
   if (current.status !== "recalling") {
     throw conflict(`Game session is already ${current.status}`);
   }
   return toRecallView(current, engine);
 };
 
-const submitRound: GameSessionService["submitRound"] = async (
-  userId,
-  sessionId,
-  body,
-) => {
-  const session = await findOwnSession(userId, sessionId);
-  // Nộp lại một ván đã chấm: trả lại kết quả cũ, không cộng thưởng lần nữa
-  if (session.status === "completed") {
-    return toCompletedView(session);
-  }
-  if (session.status === "memorizing") {
-    throw conflict("Recall phase has not started");
-  }
-  if (session.status !== "recalling" || !session.recallStartedAt) {
-    throw conflict(`Game session is already ${session.status}`);
-  }
-
-  const completedAt = new Date();
-  const recallDeadline = addSeconds(
-    session.recallStartedAt,
-    session.rules.recallLimitSec,
-  );
-  if (completedAt > addSeconds(recallDeadline, PHASE_GRACE_SEC)) {
-    await expireSession(session._id, "recalling");
-    throw conflict("Recall time is over, this game session has expired");
-  }
-
-  const answers = parseAnswers(
-    getGameEngine(session.gameName),
-    session.items,
-    parseBody(body, SUBMIT_ROUND_FIELDS).answers,
-  );
+// Ván của người đã đăng nhập: ghi kết quả ván, tiến độ game và tiến độ tài khoản trong cùng một transaction,
+// hoặc cả ba cùng được ghi, hoặc không có gì thay đổi.
+const settleUserSession = async (
+  session: GameSessionRecord,
+  userId: string,
+  answers: (string | null)[],
+  completedAt: Date,
+): Promise<void> => {
   const { gameName, recallStartedAt } = session;
+  if (!recallStartedAt) {
+    throw new Error("A recalling game session must have recallStartedAt");
+  }
 
   try {
-    // Ghi kết quả ván, tiến độ game và tiến độ tài khoản trong cùng một transaction:
-    // hoặc cả ba cùng được ghi, hoặc không có gì thay đổi.
     await mongoose.connection.transaction(async (dbSession) => {
       const gameProgress = await UserGameProgress.findOne({ userId, gameName })
         .session(dbSession)
@@ -465,8 +471,108 @@ const submitRound: GameSessionService["submitRound"] = async (
       throw error;
     }
   }
+};
 
-  return toCompletedView(await findOwnSession(userId, sessionId));
+// Ván của khách: chỉ cập nhật level đã mở trong tiến độ tạm và gia hạn cả ván lẫn tiến độ thêm GUEST_PROGRESS_TTL_SEC
+const settleGuestSession = async (
+  session: GameSessionRecord,
+  guestId: string,
+  answers: (string | null)[],
+  completedAt: Date,
+): Promise<void> => {
+  const { gameName, recallStartedAt } = session;
+  if (!recallStartedAt) {
+    throw new Error("A recalling game session must have recallStartedAt");
+  }
+
+  const settlement = settleGuestRound(
+    {
+      gameName,
+      rules: session.rules,
+      items: session.items,
+      answers,
+      startedAt: session.startedAt,
+      recallStartedAt,
+      completedAt,
+    },
+    await findUnlockedLevel({ guestId }, gameName),
+  );
+  const expiresAt = addSeconds(completedAt, GUEST_PROGRESS_TTL_SEC);
+
+  const completed = await GameSession.updateOne(
+    { _id: session._id, status: "recalling" },
+    {
+      $set: {
+        status: "completed",
+        answers,
+        completedAt,
+        memorizeSec: settlement.memorizeSec,
+        recallSec: settlement.recallSec,
+        correctItems: settlement.graded.correctItems,
+        accuracy: settlement.graded.accuracy,
+        result: settlement.graded.result,
+        guestUnlockedLevel: settlement.unlockedLevel,
+        expiresAt,
+      },
+    },
+  ).exec();
+  // Một yêu cầu nộp khác của cùng ván đã chấm trước: không cập nhật tiến độ lần nữa
+  if (completed.modifiedCount === 0) {
+    return;
+  }
+
+  // $max: hai ván nộp gần nhau không làm level đã mở bị giảm
+  await GuestProgress.updateOne(
+    { guestId, gameName },
+    {
+      $max: { unlockedLevel: settlement.unlockedLevel.after },
+      $inc: { played: 1 },
+      $set: { expiresAt },
+    },
+    { upsert: true },
+  ).exec();
+};
+
+const submitRound: GameSessionService["submitRound"] = async (
+  player,
+  sessionId,
+  body,
+) => {
+  const session = await findOwnSession(player, sessionId);
+  // Nộp lại một ván đã chấm: trả lại kết quả cũ, không cộng thưởng lần nữa
+  if (session.status === "completed") {
+    return toCompletedView(session);
+  }
+  if (session.status === "memorizing") {
+    throw conflict("Recall phase has not started");
+  }
+  if (session.status !== "recalling" || !session.recallStartedAt) {
+    throw conflict(`Game session is already ${session.status}`);
+  }
+
+  const completedAt = new Date();
+  const recallDeadline = addSeconds(
+    session.recallStartedAt,
+    session.rules.recallLimitSec,
+  );
+  if (completedAt > addSeconds(recallDeadline, PHASE_GRACE_SEC)) {
+    await expireSession(session._id, "recalling");
+    throw conflict("Recall time is over, this game session has expired");
+  }
+
+  const answers = parseAnswers(
+    getGameEngine(session.gameName),
+    session.items,
+    parseBody(body, SUBMIT_ROUND_FIELDS).answers,
+  );
+
+  if ("userId" in player) {
+    await settleUserSession(session, player.userId, answers, completedAt);
+  } else {
+    await settleGuestSession(session, player.guestId, answers, completedAt);
+  }
+
+  return toCompletedView(await findOwnSession(player, sessionId));
 };
 
 export const gameSessionService: GameSessionService = {
