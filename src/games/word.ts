@@ -33,9 +33,10 @@ export const wordEngine: GameEngine = {
             : "vi";
         return generateWordItems(count, lang, random);
     },
-    buildRecallOptions: (items) => [...items],
+    // Người chơi tự gõ lại từ, không chọn từ danh sách: phase nhớ lại không gửi từ nào xuống,
+    // nếu không recallOptions chính là đáp án theo đúng thứ tự
+    buildRecallOptions: () => [],
     toView: (code) => ({ code, label: code }),
-    toRecallView: (code) => ({ code }),
     answerView: (answer) => ({ code: answer, label: answer }),
     matches: (expected, answer) =>
         answer !== null && normalizeWord(answer) === normalizeWord(expected),

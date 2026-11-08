@@ -121,6 +121,14 @@ test("word engine generates unique words and compares with NFC normalization", (
     assert.equal(new Set(frItems).size, 10);
 });
 
+test("word recall sends no options, so the recall phase does not reveal the words", () => {
+    const wordEngine = getGameEngine("word");
+    const items = wordEngine.generateItems(10, 1);
+    assert.deepEqual(wordEngine.buildRecallOptions(items), []);
+    // Answers are typed freely and still validated by the word engine itself
+    assert.deepEqual(wordEngine.parseAnswers?.(items, [items[0], ...Array(9).fill(null)]), [items[0], ...Array(9).fill(null)]);
+});
+
 test("all languages have unique seed words and enough words for level 10", () => {
     const issues: string[] = [];
     for (const [lang, words] of Object.entries(SEED_WORDS_BY_LANG)) {
