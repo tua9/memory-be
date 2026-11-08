@@ -84,6 +84,64 @@ const nextLimitState = (previous: SendLimitState | null, now: Date): SendLimitSt
     return { windowStartedAt: previous.windowStartedAt, count: previous.count + 1, lastSentAt: now };
 };
 
+const FORGOT_SENT_MESSAGE =
+    "Nếu email tồn tại trong hệ thống, hướng dẫn đặt lại mật khẩu đã được gửi tới hộp thư của bạn.";
+
+interface SendLinkDependencies {
+    repository: PasswordResetRepository;
+    mailer: MailService;
+    clock: () => Date;
+    clientUrl: string;
+}
+
+// Giữ lượt gửi, tạo link rồi gửi email; lỗi ở bất kỳ bước nào thì bỏ link vừa tạo và trả lại lượt gửi
+const sendResetLink = async (
+    { repository, mailer, clock, clientUrl }: SendLinkDependencies,
+    account: { id: string; email: string },
+): Promise<RequestLinkResult> => {
+    const now = clock();
+    const previous = await repository.getSendLimit(account.id);
+    const next = nextLimitState(previous, now);
+
+    // Giữ chỗ trước khi gửi: hai request đồng thời không cùng vượt qua cooldown
+    if (!(await repository.reserveSend(account.id, previous, next))) {
+        throw rateLimited(PASSWORD_RESET_RESEND_COOLDOWN_MS);
+    }
+
+    const token = randomBytes(32).toString("base64url");
+    let created: Awaited<ReturnType<PasswordResetRepository["createToken"]>> | null = null;
+    try {
+        created = await repository.createToken({
+            userId: account.id,
+            tokenHash: hashToken(token),
+            expiresAt: new Date(now.getTime() + PASSWORD_RESET_TOKEN_TTL_MS),
+        });
+        // Link luôn dựng từ cấu hình; token nằm ở fragment (#) nên không gửi lên server hay vào Referer
+        const link = `${clientUrl.replace(/\/+$/, "")}/reset-password#token=${token}`;
+        await mailer.send({
+            to: account.email,
+            ...buildPasswordResetEmail({
+                link,
+                expiresInMinutes: PASSWORD_RESET_TOKEN_TTL_MS / 60_000,
+            }),
+        });
+    } catch (error) {
+        // Gửi lỗi: không báo thành công, bỏ link vừa tạo và trả lại lượt gửi để người dùng thử lại ngay
+        if (created) await repository.deleteToken(created.id).catch(() => undefined);
+        await repository.restoreSendLimit(account.id, previous).catch(() => undefined);
+        throw error;
+    }
+
+    // Gửi xong mới thu hồi link cũ, nên nếu gửi lỗi thì link cũ (nếu còn hạn) vẫn dùng được
+    await repository.deleteTokensExcept(account.id, created.id);
+
+    return {
+        maskedEmail: maskEmail(account.email),
+        expiresInMinutes: PASSWORD_RESET_TOKEN_TTL_MS / 60_000,
+        resendAfterSeconds: PASSWORD_RESET_RESEND_COOLDOWN_MS / 1000,
+    };
+};
+
 export const createPasswordResetService = ({
     repository = mongoPasswordResetRepository,
     mailer = smtpMailService,
@@ -91,52 +149,9 @@ export const createPasswordResetService = ({
     clientUrl = env.CLIENT_URL,
     hashPassword = (password) => bcrypt.hash(password, 10),
 }: PasswordResetDependencies = {}): PasswordResetService => ({
-    requestLink: async (user) => {
-        const now = clock();
-        const previous = await repository.getSendLimit(user.id);
-        const next = nextLimitState(previous, now);
-
-        // Giữ chỗ trước khi gửi: hai request đồng thời không cùng vượt qua cooldown
-        if (!(await repository.reserveSend(user.id, previous, next))) {
-            throw rateLimited(PASSWORD_RESET_RESEND_COOLDOWN_MS);
-        }
-
-        const token = randomBytes(32).toString("base64url");
-        let created: Awaited<ReturnType<PasswordResetRepository["createToken"]>> | null = null;
-        try {
-            created = await repository.createToken({
-                userId: user.id,
-                tokenHash: hashToken(token),
-                expiresAt: new Date(now.getTime() + PASSWORD_RESET_TOKEN_TTL_MS),
-            });
-            // Link luôn dựng từ cấu hình; token nằm ở fragment (#) nên không gửi lên server hay vào Referer
-            const link = `${clientUrl.replace(/\/+$/, "")}/reset-password#token=${token}`;
-            await mailer.send({
-                to: user.email,
-                ...buildPasswordResetEmail({
-                    link,
-                    expiresInMinutes: PASSWORD_RESET_TOKEN_TTL_MS / 60_000,
-                }),
-            });
-        } catch (error) {
-            // Gửi lỗi: không báo thành công, bỏ link vừa tạo và trả lại lượt gửi để người dùng thử lại ngay
-            if (created) await repository.deleteToken(created.id).catch(() => undefined);
-            await repository.restoreSendLimit(user.id, previous).catch(() => undefined);
-            throw error;
-        }
-
-        // Gửi xong mới thu hồi link cũ, nên nếu gửi lỗi thì link cũ (nếu còn hạn) vẫn dùng được
-        await repository.deleteTokensExcept(user.id, created.id);
-
-        return {
-            maskedEmail: maskEmail(user.email),
-            expiresInMinutes: PASSWORD_RESET_TOKEN_TTL_MS / 60_000,
-            resendAfterSeconds: PASSWORD_RESET_RESEND_COOLDOWN_MS / 1000,
-        };
-    },
+    requestLink: (user) => sendResetLink({ repository, mailer, clock, clientUrl }, user),
 
     forgotPassword: async (rawEmail: unknown) => {
-        const GENERIC_SENT_MESSAGE = "Nếu email tồn tại trong hệ thống, hướng dẫn đặt lại mật khẩu đã được gửi tới hộp thư của bạn.";
         if (typeof rawEmail !== "string" || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(rawEmail.trim())) {
             throw new ApiError(
                 StatusCodes.BAD_REQUEST,
@@ -147,43 +162,17 @@ export const createPasswordResetService = ({
         const email = rawEmail.trim().toLowerCase();
         const account = await repository.findAccountByEmail(email);
 
-        // Nếu email không tồn tại hoặc tài khoản không active: trả về thông báo trung tính, không tiết lộ tài khoản
-        if (!account || account.status !== "active") {
-            return { message: GENERIC_SENT_MESSAGE };
-        }
-
-        const now = clock();
-        const previous = await repository.getSendLimit(account.id);
-        const next = nextLimitState(previous, now);
-
-        if (!(await repository.reserveSend(account.id, previous, next))) {
-            throw rateLimited(PASSWORD_RESET_RESEND_COOLDOWN_MS);
-        }
-
-        const token = randomBytes(32).toString("base64url");
-        let created: Awaited<ReturnType<PasswordResetRepository["createToken"]>> | null = null;
-        try {
-            created = await repository.createToken({
-                userId: account.id,
-                tokenHash: hashToken(token),
-                expiresAt: new Date(now.getTime() + PASSWORD_RESET_TOKEN_TTL_MS),
+        // Email có tài khoản hay không, đang bị giới hạn hay gửi lỗi, đều trả cùng kết quả và gần cùng thời gian:
+        // việc gửi chạy nền và lỗi chỉ ghi log, để không ai dò được email nào đã đăng ký.
+        if (account && account.status === "active") {
+            void sendResetLink({ repository, mailer, clock, clientUrl }, account).catch((error: unknown) => {
+                console.warn(
+                    "Forgot password: reset link not sent:",
+                    error instanceof ApiError ? error.code ?? error.statusCode : (error as Error).name,
+                );
             });
-            const link = `${clientUrl.replace(/\/+$/, "")}/reset-password#token=${token}`;
-            await mailer.send({
-                to: account.email,
-                ...buildPasswordResetEmail({
-                    link,
-                    expiresInMinutes: PASSWORD_RESET_TOKEN_TTL_MS / 60_000,
-                }),
-            });
-        } catch (error) {
-            if (created) await repository.deleteToken(created.id).catch(() => undefined);
-            await repository.restoreSendLimit(account.id, previous).catch(() => undefined);
-            throw error;
         }
-
-        await repository.deleteTokensExcept(account.id, created.id);
-        return { message: GENERIC_SENT_MESSAGE };
+        return { message: FORGOT_SENT_MESSAGE };
     },
 
     // Chỉ đọc: không tiêu thụ token, để trình quét link của dịch vụ email không làm link mất hiệu lực

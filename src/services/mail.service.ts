@@ -37,6 +37,10 @@ const getTransporter = (): Transporter => {
         port: env.SMTP_PORT,
         secure: env.SMTP_PORT === 465,
         auth: { user: env.SMTP_USER, pass: env.SMTP_PASS },
+        // Mặc định của nodemailer chờ kết nối tới 2 phút và socket tới 10 phút; SMTP treo thì báo lỗi sớm thay vì giữ request
+        connectionTimeout: 10_000,
+        greetingTimeout: 10_000,
+        socketTimeout: 20_000,
     });
     return transporter;
 };

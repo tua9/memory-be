@@ -1,14 +1,5 @@
 import express from "express";
-import {
-    changePassword,
-    googleAuth,
-    refresh,
-    setPassword,
-    signIn,
-    signOut,
-    signUp,
-} from "../controller/auth.controller";
-import { protectedRoute } from "../middlewares/authMiddleware";
+import { googleAuth, refresh, signIn, signOut, signUp } from "../controller/auth.controller";
 
 const router = express.Router();
 
@@ -17,7 +8,6 @@ router.post("/login", signIn);
 router.post("/refresh", refresh);
 router.post("/logout", signOut);
 router.post("/google", googleAuth);
-router.post("/set-password", protectedRoute, setPassword);
-router.patch("/change-password", protectedRoute, changePassword);
+// Đặt / đổi mật khẩu nằm ở PATCH /profile/password: ngoài /auth nên client tự refresh phiên khi access token hết hạn
 
 export default router;

@@ -380,46 +380,8 @@ const googleSignIn = async (token: unknown): Promise<AuthTokens> => {
     return tokens;
 };
 
-const setPassword = async (userId: string, body: unknown): Promise<void> => {
-    const data = typeof body === "object" && body !== null ? (body as Record<string, unknown>) : {};
-    const { currentPassword, newPassword } = data;
-
-    if (
-        typeof newPassword !== "string" ||
-        newPassword.length < 8 ||
-        Buffer.byteLength(newPassword, "utf8") > 72
-    ) {
-        throw new ApiError(
-            StatusCodes.BAD_REQUEST,
-            "Password must be at least 8 characters and not exceed 72 bytes",
-        );
-    }
-    const user = await User.findById(userId);
-    if (!user) {
-        throw new ApiError(StatusCodes.NOT_FOUND, "User not found");
-    }
-
-    // Nếu tài khoản đã có mật khẩu, yêu cầu và xác thực mật khẩu hiện tại
-    if (user.passwordHash) {
-        if (typeof currentPassword !== "string" || !currentPassword) {
-            throw new ApiError(
-                StatusCodes.BAD_REQUEST,
-                "Current password is required",
-            );
-        }
-        const isMatch = await bcrypt.compare(currentPassword, user.passwordHash);
-        if (!isMatch) {
-            throw new ApiError(
-                StatusCodes.BAD_REQUEST,
-                "Current password is incorrect",
-            );
-        }
-    }
-
-    user.passwordHash = await bcrypt.hash(newPassword, 10);
-    await user.save();
-};
-
+// Tài khoản đã có mật khẩu: phải nhập đúng mật khẩu hiện tại.
+// Tài khoản Google chưa có mật khẩu: đặt mật khẩu lần đầu, không cần (và bỏ qua) mật khẩu hiện tại.
 const changePassword = async (
     userId: string,
     body: unknown,
@@ -428,15 +390,6 @@ const changePassword = async (
     const currentPassword = raw.currentPassword;
     const newPassword = raw.newPassword;
     const confirmPassword = raw.confirmPassword;
-
-    if (typeof currentPassword !== "string" || !currentPassword) {
-        throw new ApiError(
-            StatusCodes.BAD_REQUEST,
-            "Vui lòng nhập mật khẩu hiện tại",
-            [{ field: "currentPassword" }],
-            PASSWORD_RESET_ERROR_CODES.CURRENT_PASSWORD_REQUIRED,
-        );
-    }
 
     const validatedNewPassword = assertValidNewPassword(newPassword, confirmPassword);
 
@@ -449,6 +402,14 @@ const changePassword = async (
     }
 
     if (user.passwordHash) {
+        if (typeof currentPassword !== "string" || !currentPassword) {
+            throw new ApiError(
+                StatusCodes.BAD_REQUEST,
+                "Vui lòng nhập mật khẩu hiện tại",
+                [{ field: "currentPassword" }],
+                PASSWORD_RESET_ERROR_CODES.CURRENT_PASSWORD_REQUIRED,
+            );
+        }
         const isCurrentValid = await bcrypt.compare(currentPassword, user.passwordHash);
         if (!isCurrentValid) {
             throw new ApiError(
@@ -473,7 +434,7 @@ const changePassword = async (
     user.passwordHash = await bcrypt.hash(validatedNewPassword, 10);
     await user.save();
 
-    // Thu hồi toàn bộ refresh session
+    // Thu hồi toàn bộ refresh session, kể cả khi vừa đặt mật khẩu lần đầu
     await Session.deleteMany({ userId: user._id });
 };
 
@@ -483,6 +444,5 @@ export const authService = {
     signOut,
     refreshToken,
     googleSignIn,
-    setPassword,
     changePassword,
 };

@@ -9,6 +9,7 @@ import apiRoutes from "./routes/api";
 const app = express();
 
 app.disable("x-powered-by");
+if (env.TRUST_PROXY) app.set("trust proxy", env.TRUST_PROXY);
 app.use(morgan("dev"));
 // Chỉ cho phép frontend đã cấu hình gửi kèm cookie xác thực
 app.use(cors({ origin: env.CLIENT_URL, credentials: true }));

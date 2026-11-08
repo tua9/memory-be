@@ -459,13 +459,47 @@ test("forgotPassword: returns generic message for non-existent email without sen
     assert.equal(harness.sent.length, 0);
 });
 
+// /forgot gửi email chạy nền; repository và mailer giả lập chỉ dùng microtask nên một vòng setImmediate là đủ chờ xong
+const flushBackground = () => new Promise((resolve) => setImmediate(resolve));
+const FORGOT_MESSAGE = "Nếu email tồn tại trong hệ thống, hướng dẫn đặt lại mật khẩu đã được gửi tới hộp thư của bạn.";
+
 test("forgotPassword: sends reset link for existing email", async () => {
     const harness = await makeHarness();
     const result = await harness.service.forgotPassword(EMAIL);
-    assert.equal(result.message, "Nếu email tồn tại trong hệ thống, hướng dẫn đặt lại mật khẩu đã được gửi tới hộp thư của bạn.");
+    await flushBackground();
+    assert.equal(result.message, FORGOT_MESSAGE);
     assert.equal(harness.sent.length, 1);
     assert.equal(harness.sent[0]!.to, EMAIL);
     assert.match(harness.sent[0]!.text, new RegExp(`${CLIENT_URL}/reset-password#token=[A-Za-z0-9_-]{43}`));
+});
+
+test("forgotPassword: cooldown and email failures look exactly like an unknown email", async () => {
+    let failSend = false;
+    const harness = await makeHarness({
+        sendError: () => (failSend ? new ApiError(502, "Could not send the email", [], "EMAIL_DELIVERY_FAILED") : null),
+    });
+    const originalWarn = console.warn;
+    console.warn = () => undefined;
+    try {
+        await harness.service.forgotPassword(EMAIL);
+        await flushBackground();
+
+        // Lần hai trong 60 giây: vẫn 200 với cùng thông báo, không gửi thêm
+        assert.deepEqual(await harness.service.forgotPassword(EMAIL), { message: FORGOT_MESSAGE });
+        await flushBackground();
+        assert.equal(harness.sent.length, 1);
+
+        // SMTP lỗi: vẫn 200, không để lại link mới và trả lại lượt gửi
+        harness.advance(61_000);
+        failSend = true;
+        assert.deepEqual(await harness.service.forgotPassword(EMAIL), { message: FORGOT_MESSAGE });
+        await flushBackground();
+        assert.equal(harness.sent.length, 1);
+        assert.equal(harness.state.tokens.length, 1);
+        assert.equal(harness.state.limit?.count, 1);
+    } finally {
+        console.warn = originalWarn;
+    }
 });
 
 test("confirm rejects when new password matches current password", async () => {

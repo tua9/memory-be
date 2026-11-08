@@ -31,4 +31,7 @@ export const env = {
     SMTP_PASS: process.env.SMTP_PASS || "",
     // Tên hiển thị hoặc "Tên <địa chỉ>"; nếu bỏ trống dùng SMTP_USER
     MAIL_FROM: process.env.MAIL_FROM?.trim() || "",
+    // Số proxy đứng trước server (vd. 1 khi deploy sau Render/Nginx) để giới hạn theo IP đọc đúng IP người dùng.
+    // Bỏ trống khi chạy trực tiếp: tin X-Forwarded-For lúc đó cho phép giả IP để né giới hạn.
+    TRUST_PROXY: Number(process.env.TRUST_PROXY) || 0,
 };

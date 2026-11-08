@@ -85,15 +85,6 @@ export const googleAuth: RequestHandler = asyncHandler(async (request, response)
     });
 });
 
-export const setPassword: RequestHandler = asyncHandler(async (request, response) => {
-    const userId = request.user!._id.toString();
-    await authService.setPassword(userId, request.body);
-    response.status(StatusCodes.OK).json({
-        status: "success",
-        message: "Password set successfully",
-    });
-});
-
 export const changePassword: RequestHandler = asyncHandler(async (request, response) => {
     const user = request.user;
     if (!user) {

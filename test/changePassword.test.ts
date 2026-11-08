@@ -17,16 +17,6 @@ const USER_ID = "507f1f77bcf86cd799439011";
 const OLD_PASSWORD = "current-password-123";
 const NEW_PASSWORD = "brand-new-password-456";
 
-test("changePassword: requires currentPassword", async () => {
-    await assert.rejects(
-        () => authService.changePassword(USER_ID, { newPassword: NEW_PASSWORD, confirmPassword: NEW_PASSWORD }),
-        (error: unknown) =>
-            error instanceof ApiError &&
-            error.statusCode === 400 &&
-            error.code === "CURRENT_PASSWORD_REQUIRED",
-    );
-});
-
 test("changePassword: rejects short or invalid newPassword", async () => {
     await assert.rejects(
         () => authService.changePassword(USER_ID, { currentPassword: OLD_PASSWORD, newPassword: "short", confirmPassword: "short" }),
@@ -70,6 +60,15 @@ test("changePassword: unit test with mocked User & Session", async () => {
     };
 
     try {
+        // Tài khoản đã có mật khẩu thì bắt buộc nhập mật khẩu hiện tại
+        await assert.rejects(
+            () => authService.changePassword(USER_ID, { newPassword: NEW_PASSWORD, confirmPassword: NEW_PASSWORD }),
+            (error: unknown) =>
+                error instanceof ApiError &&
+                error.statusCode === 400 &&
+                error.code === "CURRENT_PASSWORD_REQUIRED",
+        );
+
         // Sai mật khẩu hiện tại
         await assert.rejects(
             () => authService.changePassword(USER_ID, {
@@ -112,7 +111,28 @@ test("changePassword: unit test with mocked User & Session", async () => {
     }
 });
 
-test("HTTP: change password endpoints require authentication", async () => {
+test("changePassword: a Google account without a password sets one without currentPassword", async () => {
+    const originalFindById = User.findById;
+    const originalDeleteMany = Session.deleteMany;
+    const mockUser = { _id: USER_ID, passwordHash: null as string | null, status: "active", save: async () => {} };
+    let sessionsRevoked = false;
+    (User as unknown as { findById: (id: string) => Promise<unknown> }).findById = async () => mockUser;
+    (Session as unknown as { deleteMany: () => Promise<unknown> }).deleteMany = async () => {
+        sessionsRevoked = true;
+        return { deletedCount: 1 };
+    };
+
+    try {
+        await authService.changePassword(USER_ID, { newPassword: NEW_PASSWORD, confirmPassword: NEW_PASSWORD });
+        assert.equal(await bcrypt.compare(NEW_PASSWORD, mockUser.passwordHash!), true);
+        assert.equal(sessionsRevoked, true);
+    } finally {
+        User.findById = originalFindById;
+        Session.deleteMany = originalDeleteMany;
+    }
+});
+
+test("HTTP: PATCH /profile/password requires authentication", async () => {
     const app = express();
     app.use(express.json());
     app.use(cookieParser());
@@ -126,12 +146,13 @@ test("HTTP: change password endpoints require authentication", async () => {
     const baseUrl = `http://127.0.0.1:${port}`;
 
     try {
+        // Chỉ còn một endpoint: route cũ dưới /auth không nằm trong luồng tự refresh phiên của client
         const authRes = await fetch(`${baseUrl}/api/auth/change-password`, {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ currentPassword: "x", newPassword: "y", confirmPassword: "y" }),
         });
-        assert.equal(authRes.status, 401);
+        assert.equal(authRes.status, 404);
 
         const profileRes = await fetch(`${baseUrl}/api/profile/password`, {
             method: "PATCH",

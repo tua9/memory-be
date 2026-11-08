@@ -26,19 +26,3 @@ test("googleSignIn: rejects empty or non-string token", async () => {
         },
     );
 });
-
-test("setPassword: rejects short password (< 8 chars)", async () => {
-    await assert.rejects(
-        async () => {
-            await authService.setPassword("507f1f77bcf86cd799439011", {
-                newPassword: "short",
-            });
-        },
-        (error: unknown) => {
-            assert(error instanceof ApiError);
-            assert.equal(error.statusCode, 400);
-            return true;
-        },
-    );
-});
-
