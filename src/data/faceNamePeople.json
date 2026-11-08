@@ -1,842 +1,107 @@
 [
-  {
-    "id": 1,
-    "name": "Anna",
-    "imageUrl": "https://api.dicebear.com/7.x/adventurer/svg?seed=Anna",
-    "origin": "international",
-    "difficulty": "challenging",
-    "confusableGroup": "anna-ana"
-  },
-  {
-    "id": 2,
-    "name": "Ana",
-    "imageUrl": "https://api.dicebear.com/7.x/adventurer/svg?seed=Ana",
-    "origin": "international",
-    "difficulty": "challenging",
-    "confusableGroup": "anna-ana"
-  },
-  {
-    "id": 3,
-    "name": "Claire",
-    "imageUrl": "https://api.dicebear.com/7.x/adventurer/svg?seed=Claire",
-    "origin": "international",
-    "difficulty": "challenging",
-    "confusableGroup": "claire-clare"
-  },
-  {
-    "id": 4,
-    "name": "Clare",
-    "imageUrl": "https://api.dicebear.com/7.x/adventurer/svg?seed=Clare",
-    "origin": "international",
-    "difficulty": "challenging",
-    "confusableGroup": "claire-clare"
-  },
-  {
-    "id": 5,
-    "name": "Bryan",
-    "imageUrl": "https://api.dicebear.com/7.x/adventurer/svg?seed=Bryan",
-    "origin": "international",
-    "difficulty": "challenging",
-    "confusableGroup": "bryan-brian"
-  },
-  {
-    "id": 6,
-    "name": "Brian",
-    "imageUrl": "https://api.dicebear.com/7.x/adventurer/svg?seed=Brian",
-    "origin": "international",
-    "difficulty": "challenging",
-    "confusableGroup": "bryan-brian"
-  },
-  {
-    "id": 7,
-    "name": "Sophie",
-    "imageUrl": "https://api.dicebear.com/7.x/adventurer/svg?seed=Sophie",
-    "origin": "international",
-    "difficulty": "challenging",
-    "confusableGroup": "sophie-sofia"
-  },
-  {
-    "id": 8,
-    "name": "Sofia",
-    "imageUrl": "https://api.dicebear.com/7.x/adventurer/svg?seed=Sofia",
-    "origin": "international",
-    "difficulty": "challenging",
-    "confusableGroup": "sophie-sofia"
-  },
-  {
-    "id": 9,
-    "name": "Stephen",
-    "imageUrl": "https://api.dicebear.com/7.x/adventurer/svg?seed=Stephen",
-    "origin": "international",
-    "difficulty": "challenging",
-    "confusableGroup": "stephen-steven"
-  },
-  {
-    "id": 10,
-    "name": "Steven",
-    "imageUrl": "https://api.dicebear.com/7.x/adventurer/svg?seed=Steven",
-    "origin": "international",
-    "difficulty": "challenging",
-    "confusableGroup": "stephen-steven"
-  },
-  {
-    "id": 11,
-    "name": "Elena",
-    "imageUrl": "https://api.dicebear.com/7.x/adventurer/svg?seed=Elena",
-    "origin": "international",
-    "difficulty": "challenging",
-    "confusableGroup": "elena-helena"
-  },
-  {
-    "id": 12,
-    "name": "Helena",
-    "imageUrl": "https://api.dicebear.com/7.x/adventurer/svg?seed=Helena",
-    "origin": "international",
-    "difficulty": "challenging",
-    "confusableGroup": "elena-helena"
-  },
-  {
-    "id": 13,
-    "name": "Marc",
-    "imageUrl": "https://api.dicebear.com/7.x/adventurer/svg?seed=Marc",
-    "origin": "international",
-    "difficulty": "challenging",
-    "confusableGroup": "marc-mark"
-  },
-  {
-    "id": 14,
-    "name": "Mark",
-    "imageUrl": "https://api.dicebear.com/7.x/adventurer/svg?seed=Mark",
-    "origin": "international",
-    "difficulty": "challenging",
-    "confusableGroup": "marc-mark"
-  },
-  {
-    "id": 15,
-    "name": "Eric",
-    "imageUrl": "https://api.dicebear.com/7.x/adventurer/svg?seed=Eric",
-    "origin": "international",
-    "difficulty": "challenging",
-    "confusableGroup": "eric-erik"
-  },
-  {
-    "id": 16,
-    "name": "Erik",
-    "imageUrl": "https://api.dicebear.com/7.x/adventurer/svg?seed=Erik",
-    "origin": "international",
-    "difficulty": "challenging",
-    "confusableGroup": "eric-erik"
-  },
-  {
-    "id": 17,
-    "name": "Sara",
-    "imageUrl": "https://api.dicebear.com/7.x/adventurer/svg?seed=Sara",
-    "origin": "international",
-    "difficulty": "challenging",
-    "confusableGroup": "sara-sarah"
-  },
-  {
-    "id": 18,
-    "name": "Sarah",
-    "imageUrl": "https://api.dicebear.com/7.x/adventurer/svg?seed=Sarah",
-    "origin": "international",
-    "difficulty": "challenging",
-    "confusableGroup": "sara-sarah"
-  },
-  {
-    "id": 19,
-    "name": "Philip",
-    "imageUrl": "https://api.dicebear.com/7.x/adventurer/svg?seed=Philip",
-    "origin": "international",
-    "difficulty": "challenging",
-    "confusableGroup": "philip-phillip"
-  },
-  {
-    "id": 20,
-    "name": "Phillip",
-    "imageUrl": "https://api.dicebear.com/7.x/adventurer/svg?seed=Phillip",
-    "origin": "international",
-    "difficulty": "challenging",
-    "confusableGroup": "philip-phillip"
-  },
-  {
-    "id": 21,
-    "name": "Sean",
-    "imageUrl": "https://api.dicebear.com/7.x/adventurer/svg?seed=Sean",
-    "origin": "international",
-    "difficulty": "challenging",
-    "confusableGroup": "sean-shawn"
-  },
-  {
-    "id": 22,
-    "name": "Shawn",
-    "imageUrl": "https://api.dicebear.com/7.x/adventurer/svg?seed=Shawn",
-    "origin": "international",
-    "difficulty": "challenging",
-    "confusableGroup": "sean-shawn"
-  },
-  {
-    "id": 23,
-    "name": "Chloe",
-    "imageUrl": "https://api.dicebear.com/7.x/adventurer/svg?seed=Chloe",
-    "origin": "international",
-    "difficulty": "challenging",
-    "confusableGroup": "chloe-zoe"
-  },
-  {
-    "id": 24,
-    "name": "Zoe",
-    "imageUrl": "https://api.dicebear.com/7.x/adventurer/svg?seed=Zoe",
-    "origin": "international",
-    "difficulty": "challenging",
-    "confusableGroup": "chloe-zoe"
-  },
-  {
-    "id": 25,
-    "name": "Maximilian",
-    "imageUrl": "https://api.dicebear.com/7.x/adventurer/svg?seed=Maximilian",
-    "origin": "international",
-    "difficulty": "challenging",
-    "confusableGroup": null
-  },
-  {
-    "id": 26,
-    "name": "Bartholomew",
-    "imageUrl": "https://api.dicebear.com/7.x/adventurer/svg?seed=Bartholomew",
-    "origin": "international",
-    "difficulty": "challenging",
-    "confusableGroup": null
-  },
-  {
-    "id": 27,
-    "name": "Genevieve",
-    "imageUrl": "https://api.dicebear.com/7.x/adventurer/svg?seed=Genevieve",
-    "origin": "international",
-    "difficulty": "challenging",
-    "confusableGroup": null
-  },
-  {
-    "id": 28,
-    "name": "Anastasia",
-    "imageUrl": "https://api.dicebear.com/7.x/adventurer/svg?seed=Anastasia",
-    "origin": "international",
-    "difficulty": "challenging",
-    "confusableGroup": null
-  },
-  {
-    "id": 29,
-    "name": "Jacqueline",
-    "imageUrl": "https://api.dicebear.com/7.x/adventurer/svg?seed=Jacqueline",
-    "origin": "international",
-    "difficulty": "challenging",
-    "confusableGroup": null
-  },
-  {
-    "id": 30,
-    "name": "Francesca",
-    "imageUrl": "https://api.dicebear.com/7.x/adventurer/svg?seed=Francesca",
-    "origin": "international",
-    "difficulty": "challenging",
-    "confusableGroup": null
-  },
-  {
-    "id": 31,
-    "name": "Valentina",
-    "imageUrl": "https://api.dicebear.com/7.x/adventurer/svg?seed=Valentina",
-    "origin": "international",
-    "difficulty": "challenging",
-    "confusableGroup": null
-  },
-  {
-    "id": 32,
-    "name": "Dominique",
-    "imageUrl": "https://api.dicebear.com/7.x/adventurer/svg?seed=Dominique",
-    "origin": "international",
-    "difficulty": "challenging",
-    "confusableGroup": null
-  },
-  {
-    "id": 33,
-    "name": "Sebastian",
-    "imageUrl": "https://api.dicebear.com/7.x/adventurer/svg?seed=Sebastian",
-    "origin": "international",
-    "difficulty": "challenging",
-    "confusableGroup": null
-  },
-  {
-    "id": 34,
-    "name": "Guillaume",
-    "imageUrl": "https://api.dicebear.com/7.x/adventurer/svg?seed=Guillaume",
-    "origin": "international",
-    "difficulty": "challenging",
-    "confusableGroup": null
-  },
-  {
-    "id": 35,
-    "name": "Alejandro",
-    "imageUrl": "https://api.dicebear.com/7.x/adventurer/svg?seed=Alejandro",
-    "origin": "international",
-    "difficulty": "challenging",
-    "confusableGroup": null
-  },
-  {
-    "id": 36,
-    "name": "Evangeline",
-    "imageUrl": "https://api.dicebear.com/7.x/adventurer/svg?seed=Evangeline",
-    "origin": "international",
-    "difficulty": "challenging",
-    "confusableGroup": null
-  },
-  {
-    "id": 37,
-    "name": "Constantine",
-    "imageUrl": "https://api.dicebear.com/7.x/adventurer/svg?seed=Constantine",
-    "origin": "international",
-    "difficulty": "challenging",
-    "confusableGroup": null
-  },
-  {
-    "id": 38,
-    "name": "Theodore",
-    "imageUrl": "https://api.dicebear.com/7.x/adventurer/svg?seed=Theodore",
-    "origin": "international",
-    "difficulty": "challenging",
-    "confusableGroup": null
-  },
-  {
-    "id": 39,
-    "name": "Penelope",
-    "imageUrl": "https://api.dicebear.com/7.x/adventurer/svg?seed=Penelope",
-    "origin": "international",
-    "difficulty": "challenging",
-    "confusableGroup": null
-  },
-  {
-    "id": 40,
-    "name": "Leonardo",
-    "imageUrl": "https://api.dicebear.com/7.x/adventurer/svg?seed=Leonardo",
-    "origin": "international",
-    "difficulty": "challenging",
-    "confusableGroup": null
-  },
-  {
-    "id": 41,
-    "name": "Alexander",
-    "imageUrl": "https://api.dicebear.com/7.x/adventurer/svg?seed=Alexander",
-    "origin": "international",
-    "difficulty": "varied",
-    "confusableGroup": null
-  },
-  {
-    "id": 42,
-    "name": "Isabella",
-    "imageUrl": "https://api.dicebear.com/7.x/adventurer/svg?seed=Isabella",
-    "origin": "international",
-    "difficulty": "varied",
-    "confusableGroup": null
-  },
-  {
-    "id": 43,
-    "name": "Benjamin",
-    "imageUrl": "https://api.dicebear.com/7.x/adventurer/svg?seed=Benjamin",
-    "origin": "international",
-    "difficulty": "varied",
-    "confusableGroup": null
-  },
-  {
-    "id": 44,
-    "name": "Charlotte",
-    "imageUrl": "https://api.dicebear.com/7.x/adventurer/svg?seed=Charlotte",
-    "origin": "international",
-    "difficulty": "varied",
-    "confusableGroup": null
-  },
-  {
-    "id": 45,
-    "name": "Lucas",
-    "imageUrl": "https://api.dicebear.com/7.x/adventurer/svg?seed=Lucas",
-    "origin": "international",
-    "difficulty": "varied",
-    "confusableGroup": null
-  },
-  {
-    "id": 46,
-    "name": "Amelia",
-    "imageUrl": "https://api.dicebear.com/7.x/adventurer/svg?seed=Amelia",
-    "origin": "international",
-    "difficulty": "varied",
-    "confusableGroup": null
-  },
-  {
-    "id": 47,
-    "name": "Henry",
-    "imageUrl": "https://api.dicebear.com/7.x/adventurer/svg?seed=Henry",
-    "origin": "international",
-    "difficulty": "varied",
-    "confusableGroup": null
-  },
-  {
-    "id": 48,
-    "name": "Mia",
-    "imageUrl": "https://api.dicebear.com/7.x/adventurer/svg?seed=Mia",
-    "origin": "international",
-    "difficulty": "varied",
-    "confusableGroup": null
-  },
-  {
-    "id": 49,
-    "name": "Gabriel",
-    "imageUrl": "https://api.dicebear.com/7.x/adventurer/svg?seed=Gabriel",
-    "origin": "international",
-    "difficulty": "varied",
-    "confusableGroup": null
-  },
-  {
-    "id": 50,
-    "name": "Evelyn",
-    "imageUrl": "https://api.dicebear.com/7.x/adventurer/svg?seed=Evelyn",
-    "origin": "international",
-    "difficulty": "varied",
-    "confusableGroup": null
-  },
-  {
-    "id": 51,
-    "name": "Oliver",
-    "imageUrl": "https://api.dicebear.com/7.x/adventurer/svg?seed=Oliver",
-    "origin": "international",
-    "difficulty": "varied",
-    "confusableGroup": null
-  },
-  {
-    "id": 52,
-    "name": "Harper",
-    "imageUrl": "https://api.dicebear.com/7.x/adventurer/svg?seed=Harper",
-    "origin": "international",
-    "difficulty": "varied",
-    "confusableGroup": null
-  },
-  {
-    "id": 53,
-    "name": "Daniel",
-    "imageUrl": "https://api.dicebear.com/7.x/adventurer/svg?seed=Daniel",
-    "origin": "international",
-    "difficulty": "varied",
-    "confusableGroup": null
-  },
-  {
-    "id": 54,
-    "name": "Victoria",
-    "imageUrl": "https://api.dicebear.com/7.x/adventurer/svg?seed=Victoria",
-    "origin": "international",
-    "difficulty": "varied",
-    "confusableGroup": null
-  },
-  {
-    "id": 55,
-    "name": "Samuel",
-    "imageUrl": "https://api.dicebear.com/7.x/adventurer/svg?seed=Samuel",
-    "origin": "international",
-    "difficulty": "varied",
-    "confusableGroup": null
-  },
-  {
-    "id": 56,
-    "name": "Quỳnh",
-    "imageUrl": "https://api.dicebear.com/7.x/adventurer/svg?seed=Quynh",
-    "origin": "vietnamese",
-    "difficulty": "varied",
-    "confusableGroup": null
-  },
-  {
-    "id": 57,
-    "name": "Đức",
-    "imageUrl": "https://api.dicebear.com/7.x/adventurer/svg?seed=Duc",
-    "origin": "vietnamese",
-    "difficulty": "varied",
-    "confusableGroup": null
-  },
-  {
-    "id": 58,
-    "name": "Hương",
-    "imageUrl": "https://api.dicebear.com/7.x/adventurer/svg?seed=Huong",
-    "origin": "vietnamese",
-    "difficulty": "varied",
-    "confusableGroup": null
-  },
-  {
-    "id": 59,
-    "name": "Ngân",
-    "imageUrl": "https://api.dicebear.com/7.x/adventurer/svg?seed=Ngan",
-    "origin": "vietnamese",
-    "difficulty": "varied",
-    "confusableGroup": null
-  },
-  {
-    "id": 60,
-    "name": "Trâm",
-    "imageUrl": "https://api.dicebear.com/7.x/adventurer/svg?seed=Tram",
-    "origin": "vietnamese",
-    "difficulty": "varied",
-    "confusableGroup": null
-  },
-  {
-    "id": 61,
-    "name": "Khoa",
-    "imageUrl": "https://api.dicebear.com/7.x/adventurer/svg?seed=Khoa",
-    "origin": "vietnamese",
-    "difficulty": "varied",
-    "confusableGroup": null
-  },
-  {
-    "id": 62,
-    "name": "Yến",
-    "imageUrl": "https://api.dicebear.com/7.x/adventurer/svg?seed=Yen",
-    "origin": "vietnamese",
-    "difficulty": "varied",
-    "confusableGroup": null
-  },
-  {
-    "id": 63,
-    "name": "Thịnh",
-    "imageUrl": "https://api.dicebear.com/7.x/adventurer/svg?seed=Thinh",
-    "origin": "vietnamese",
-    "difficulty": "varied",
-    "confusableGroup": null
-  },
-  {
-    "id": 64,
-    "name": "Nga",
-    "imageUrl": "https://api.dicebear.com/7.x/adventurer/svg?seed=Nga",
-    "origin": "vietnamese",
-    "difficulty": "varied",
-    "confusableGroup": null
-  },
-  {
-    "id": 65,
-    "name": "Khánh",
-    "imageUrl": "https://api.dicebear.com/7.x/adventurer/svg?seed=Khanh",
-    "origin": "vietnamese",
-    "difficulty": "varied",
-    "confusableGroup": null
-  },
-  {
-    "id": 66,
-    "name": "Bích",
-    "imageUrl": "https://api.dicebear.com/7.x/adventurer/svg?seed=Bich",
-    "origin": "vietnamese",
-    "difficulty": "varied",
-    "confusableGroup": null
-  },
-  {
-    "id": 67,
-    "name": "Huy",
-    "imageUrl": "https://api.dicebear.com/7.x/adventurer/svg?seed=Huy",
-    "origin": "vietnamese",
-    "difficulty": "varied",
-    "confusableGroup": null
-  },
-  {
-    "id": 68,
-    "name": "Phước",
-    "imageUrl": "https://api.dicebear.com/7.x/adventurer/svg?seed=Phuoc",
-    "origin": "vietnamese",
-    "difficulty": "varied",
-    "confusableGroup": null
-  },
-  {
-    "id": 69,
-    "name": "Tuyền",
-    "imageUrl": "https://api.dicebear.com/7.x/adventurer/svg?seed=Tuyen",
-    "origin": "vietnamese",
-    "difficulty": "varied",
-    "confusableGroup": null
-  },
-  {
-    "id": 70,
-    "name": "Duyên",
-    "imageUrl": "https://api.dicebear.com/7.x/adventurer/svg?seed=Duyen",
-    "origin": "vietnamese",
-    "difficulty": "varied",
-    "confusableGroup": null
-  },
-  {
-    "id": 71,
-    "name": "John",
-    "imageUrl": "https://api.dicebear.com/7.x/adventurer/svg?seed=John",
-    "origin": "international",
-    "difficulty": "common",
-    "confusableGroup": null
-  },
-  {
-    "id": 72,
-    "name": "Mary",
-    "imageUrl": "https://api.dicebear.com/7.x/adventurer/svg?seed=Mary",
-    "origin": "international",
-    "difficulty": "common",
-    "confusableGroup": null
-  },
-  {
-    "id": 73,
-    "name": "David",
-    "imageUrl": "https://api.dicebear.com/7.x/adventurer/svg?seed=David",
-    "origin": "international",
-    "difficulty": "common",
-    "confusableGroup": null
-  },
-  {
-    "id": 74,
-    "name": "James",
-    "imageUrl": "https://api.dicebear.com/7.x/adventurer/svg?seed=James",
-    "origin": "international",
-    "difficulty": "common",
-    "confusableGroup": null
-  },
-  {
-    "id": 75,
-    "name": "Emma",
-    "imageUrl": "https://api.dicebear.com/7.x/adventurer/svg?seed=Emma",
-    "origin": "international",
-    "difficulty": "common",
-    "confusableGroup": null
-  },
-  {
-    "id": 76,
-    "name": "Michael",
-    "imageUrl": "https://api.dicebear.com/7.x/adventurer/svg?seed=Michael",
-    "origin": "international",
-    "difficulty": "common",
-    "confusableGroup": null
-  },
-  {
-    "id": 77,
-    "name": "Emily",
-    "imageUrl": "https://api.dicebear.com/7.x/adventurer/svg?seed=Emily",
-    "origin": "international",
-    "difficulty": "common",
-    "confusableGroup": null
-  },
-  {
-    "id": 78,
-    "name": "William",
-    "imageUrl": "https://api.dicebear.com/7.x/adventurer/svg?seed=William",
-    "origin": "international",
-    "difficulty": "common",
-    "confusableGroup": null
-  },
-  {
-    "id": 79,
-    "name": "Robert",
-    "imageUrl": "https://api.dicebear.com/7.x/adventurer/svg?seed=Robert",
-    "origin": "international",
-    "difficulty": "common",
-    "confusableGroup": null
-  },
-  {
-    "id": 80,
-    "name": "Jessica",
-    "imageUrl": "https://api.dicebear.com/7.x/adventurer/svg?seed=Jessica",
-    "origin": "international",
-    "difficulty": "common",
-    "confusableGroup": null
-  },
-  {
-    "id": 81,
-    "name": "Thomas",
-    "imageUrl": "https://api.dicebear.com/7.x/adventurer/svg?seed=Thomas",
-    "origin": "international",
-    "difficulty": "common",
-    "confusableGroup": null
-  },
-  {
-    "id": 82,
-    "name": "Grace",
-    "imageUrl": "https://api.dicebear.com/7.x/adventurer/svg?seed=Grace",
-    "origin": "international",
-    "difficulty": "common",
-    "confusableGroup": null
-  },
-  {
-    "id": 83,
-    "name": "Paul",
-    "imageUrl": "https://api.dicebear.com/7.x/adventurer/svg?seed=Paul",
-    "origin": "international",
-    "difficulty": "common",
-    "confusableGroup": null
-  },
-  {
-    "id": 84,
-    "name": "Lisa",
-    "imageUrl": "https://api.dicebear.com/7.x/adventurer/svg?seed=Lisa",
-    "origin": "international",
-    "difficulty": "common",
-    "confusableGroup": null
-  },
-  {
-    "id": 85,
-    "name": "George",
-    "imageUrl": "https://api.dicebear.com/7.x/adventurer/svg?seed=George",
-    "origin": "international",
-    "difficulty": "common",
-    "confusableGroup": null
-  },
-  {
-    "id": 86,
-    "name": "Linh",
-    "imageUrl": "https://api.dicebear.com/7.x/adventurer/svg?seed=Linh",
-    "origin": "vietnamese",
-    "difficulty": "common",
-    "confusableGroup": null
-  },
-  {
-    "id": 87,
-    "name": "Tuấn",
-    "imageUrl": "https://api.dicebear.com/7.x/adventurer/svg?seed=Tuan",
-    "origin": "vietnamese",
-    "difficulty": "common",
-    "confusableGroup": null
-  },
-  {
-    "id": 88,
-    "name": "Trang",
-    "imageUrl": "https://api.dicebear.com/7.x/adventurer/svg?seed=Trang",
-    "origin": "vietnamese",
-    "difficulty": "common",
-    "confusableGroup": null
-  },
-  {
-    "id": 89,
-    "name": "Dũng",
-    "imageUrl": "https://api.dicebear.com/7.x/adventurer/svg?seed=Dung",
-    "origin": "vietnamese",
-    "difficulty": "common",
-    "confusableGroup": null
-  },
-  {
-    "id": 90,
-    "name": "Mai",
-    "imageUrl": "https://api.dicebear.com/7.x/adventurer/svg?seed=Mai",
-    "origin": "vietnamese",
-    "difficulty": "common",
-    "confusableGroup": null
-  },
-  {
-    "id": 91,
-    "name": "Nam",
-    "imageUrl": "https://api.dicebear.com/7.x/adventurer/svg?seed=Nam",
-    "origin": "vietnamese",
-    "difficulty": "common",
-    "confusableGroup": null
-  },
-  {
-    "id": 92,
-    "name": "Hoa",
-    "imageUrl": "https://api.dicebear.com/7.x/adventurer/svg?seed=Hoa",
-    "origin": "vietnamese",
-    "difficulty": "common",
-    "confusableGroup": null
-  },
-  {
-    "id": 93,
-    "name": "Phúc",
-    "imageUrl": "https://api.dicebear.com/7.x/adventurer/svg?seed=Phuc",
-    "origin": "vietnamese",
-    "difficulty": "common",
-    "confusableGroup": null
-  },
-  {
-    "id": 94,
-    "name": "Thảo",
-    "imageUrl": "https://api.dicebear.com/7.x/adventurer/svg?seed=Thao",
-    "origin": "vietnamese",
-    "difficulty": "common",
-    "confusableGroup": null
-  },
-  {
-    "id": 95,
-    "name": "Lan",
-    "imageUrl": "https://api.dicebear.com/7.x/adventurer/svg?seed=Lan",
-    "origin": "vietnamese",
-    "difficulty": "common",
-    "confusableGroup": null
-  },
-  {
-    "id": 96,
-    "name": "Long",
-    "imageUrl": "https://api.dicebear.com/7.x/adventurer/svg?seed=Long",
-    "origin": "vietnamese",
-    "difficulty": "common",
-    "confusableGroup": null
-  },
-  {
-    "id": 97,
-    "name": "Hùng",
-    "imageUrl": "https://api.dicebear.com/7.x/adventurer/svg?seed=Hung",
-    "origin": "vietnamese",
-    "difficulty": "common",
-    "confusableGroup": null
-  },
-  {
-    "id": 98,
-    "name": "Minh",
-    "imageUrl": "https://api.dicebear.com/7.x/adventurer/svg?seed=Minh",
-    "origin": "vietnamese",
-    "difficulty": "common",
-    "confusableGroup": null
-  },
-  {
-    "id": 99,
-    "name": "Ngọc",
-    "imageUrl": "https://api.dicebear.com/7.x/adventurer/svg?seed=Ngoc",
-    "origin": "vietnamese",
-    "difficulty": "common",
-    "confusableGroup": null
-  },
-  {
-    "id": 100,
-    "name": "Hải",
-    "imageUrl": "https://api.dicebear.com/7.x/adventurer/svg?seed=Hai",
-    "origin": "vietnamese",
-    "difficulty": "common",
-    "confusableGroup": null
-  },
-  {
-    "id": 101,
-    "name": "Vy",
-    "imageUrl": "https://api.dicebear.com/7.x/adventurer/svg?seed=Vy",
-    "origin": "vietnamese",
-    "difficulty": "common",
-    "confusableGroup": null
-  },
-  {
-    "id": 102,
-    "name": "Bình",
-    "imageUrl": "https://api.dicebear.com/7.x/adventurer/svg?seed=Binh",
-    "origin": "vietnamese",
-    "difficulty": "common",
-    "confusableGroup": null
-  },
-  {
-    "id": 103,
-    "name": "Chi",
-    "imageUrl": "https://api.dicebear.com/7.x/adventurer/svg?seed=Chi",
-    "origin": "vietnamese",
-    "difficulty": "common",
-    "confusableGroup": null
-  },
-  {
-    "id": 104,
-    "name": "An",
-    "imageUrl": "https://api.dicebear.com/7.x/adventurer/svg?seed=An",
-    "origin": "vietnamese",
-    "difficulty": "common",
-    "confusableGroup": null
-  },
-  {
-    "id": 105,
-    "name": "Duy",
-    "imageUrl": "https://api.dicebear.com/7.x/adventurer/svg?seed=Duy",
-    "origin": "vietnamese",
-    "difficulty": "common",
-    "confusableGroup": null
-  }
+  { "id": 1, "name": "Anna", "imageUrl": "https://i.pravatar.cc/150?img=1", "origin": "international", "difficulty": "challenging", "confusableGroup": "anna-ana" },
+  { "id": 2, "name": "Ana", "imageUrl": "https://i.pravatar.cc/150?img=2", "origin": "international", "difficulty": "challenging", "confusableGroup": "anna-ana" },
+  { "id": 3, "name": "Claire", "imageUrl": "https://i.pravatar.cc/150?img=3", "origin": "international", "difficulty": "challenging", "confusableGroup": "claire-clare" },
+  { "id": 4, "name": "Clare", "imageUrl": "https://i.pravatar.cc/150?img=4", "origin": "international", "difficulty": "challenging", "confusableGroup": "claire-clare" },
+  { "id": 5, "name": "Bryan", "imageUrl": "https://i.pravatar.cc/150?img=5", "origin": "international", "difficulty": "challenging", "confusableGroup": "bryan-brian" },
+  { "id": 6, "name": "Brian", "imageUrl": "https://i.pravatar.cc/150?img=6", "origin": "international", "difficulty": "challenging", "confusableGroup": "bryan-brian" },
+  { "id": 7, "name": "Sophie", "imageUrl": "https://i.pravatar.cc/150?img=7", "origin": "international", "difficulty": "challenging", "confusableGroup": "sophie-sofia" },
+  { "id": 8, "name": "Sofia", "imageUrl": "https://i.pravatar.cc/150?img=8", "origin": "international", "difficulty": "challenging", "confusableGroup": "sophie-sofia" },
+  { "id": 9, "name": "Stephen", "imageUrl": "https://i.pravatar.cc/150?img=9", "origin": "international", "difficulty": "challenging", "confusableGroup": "stephen-steven" },
+  { "id": 10, "name": "Steven", "imageUrl": "https://i.pravatar.cc/150?img=10", "origin": "international", "difficulty": "challenging", "confusableGroup": "stephen-steven" },
+  { "id": 11, "name": "Elena", "imageUrl": "https://i.pravatar.cc/150?img=11", "origin": "international", "difficulty": "challenging", "confusableGroup": "elena-helena" },
+  { "id": 12, "name": "Helena", "imageUrl": "https://i.pravatar.cc/150?img=12", "origin": "international", "difficulty": "challenging", "confusableGroup": "elena-helena" },
+  { "id": 13, "name": "Marc", "imageUrl": "https://i.pravatar.cc/150?img=13", "origin": "international", "difficulty": "challenging", "confusableGroup": "marc-mark" },
+  { "id": 14, "name": "Mark", "imageUrl": "https://i.pravatar.cc/150?img=14", "origin": "international", "difficulty": "challenging", "confusableGroup": "marc-mark" },
+  { "id": 15, "name": "Eric", "imageUrl": "https://i.pravatar.cc/150?img=15", "origin": "international", "difficulty": "challenging", "confusableGroup": "eric-erik" },
+  { "id": 16, "name": "Erik", "imageUrl": "https://i.pravatar.cc/150?img=16", "origin": "international", "difficulty": "challenging", "confusableGroup": "eric-erik" },
+  { "id": 17, "name": "Sara", "imageUrl": "https://i.pravatar.cc/150?img=17", "origin": "international", "difficulty": "challenging", "confusableGroup": "sara-sarah" },
+  { "id": 18, "name": "Sarah", "imageUrl": "https://i.pravatar.cc/150?img=18", "origin": "international", "difficulty": "challenging", "confusableGroup": "sara-sarah" },
+  { "id": 19, "name": "Philip", "imageUrl": "https://i.pravatar.cc/150?img=19", "origin": "international", "difficulty": "challenging", "confusableGroup": "philip-phillip" },
+  { "id": 20, "name": "Phillip", "imageUrl": "https://i.pravatar.cc/150?img=20", "origin": "international", "difficulty": "challenging", "confusableGroup": "philip-phillip" },
+  { "id": 21, "name": "Sean", "imageUrl": "https://i.pravatar.cc/150?img=21", "origin": "international", "difficulty": "challenging", "confusableGroup": "sean-shawn" },
+  { "id": 22, "name": "Shawn", "imageUrl": "https://i.pravatar.cc/150?img=22", "origin": "international", "difficulty": "challenging", "confusableGroup": "sean-shawn" },
+  { "id": 23, "name": "Chloe", "imageUrl": "https://i.pravatar.cc/150?img=23", "origin": "international", "difficulty": "challenging", "confusableGroup": "chloe-zoe" },
+  { "id": 24, "name": "Zoe", "imageUrl": "https://i.pravatar.cc/150?img=24", "origin": "international", "difficulty": "challenging", "confusableGroup": "chloe-zoe" },
+  { "id": 25, "name": "Maximilian", "imageUrl": "https://i.pravatar.cc/150?img=25", "origin": "international", "difficulty": "challenging", "confusableGroup": null },
+  { "id": 26, "name": "Bartholomew", "imageUrl": "https://i.pravatar.cc/150?img=26", "origin": "international", "difficulty": "challenging", "confusableGroup": null },
+  { "id": 27, "name": "Genevieve", "imageUrl": "https://i.pravatar.cc/150?img=27", "origin": "international", "difficulty": "challenging", "confusableGroup": null },
+  { "id": 28, "name": "Anastasia", "imageUrl": "https://i.pravatar.cc/150?img=28", "origin": "international", "difficulty": "challenging", "confusableGroup": null },
+  { "id": 29, "name": "Jacqueline", "imageUrl": "https://i.pravatar.cc/150?img=29", "origin": "international", "difficulty": "challenging", "confusableGroup": null },
+  { "id": 30, "name": "Francesca", "imageUrl": "https://i.pravatar.cc/150?img=30", "origin": "international", "difficulty": "challenging", "confusableGroup": null },
+  { "id": 31, "name": "Valentina", "imageUrl": "https://i.pravatar.cc/150?img=31", "origin": "international", "difficulty": "challenging", "confusableGroup": null },
+  { "id": 32, "name": "Dominique", "imageUrl": "https://i.pravatar.cc/150?img=32", "origin": "international", "difficulty": "challenging", "confusableGroup": null },
+  { "id": 33, "name": "Sebastian", "imageUrl": "https://i.pravatar.cc/150?img=33", "origin": "international", "difficulty": "challenging", "confusableGroup": null },
+  { "id": 34, "name": "Guillaume", "imageUrl": "https://i.pravatar.cc/150?img=34", "origin": "international", "difficulty": "challenging", "confusableGroup": null },
+  { "id": 35, "name": "Alejandro", "imageUrl": "https://i.pravatar.cc/150?img=35", "origin": "international", "difficulty": "challenging", "confusableGroup": null },
+  { "id": 36, "name": "Evangeline", "imageUrl": "https://i.pravatar.cc/150?img=36", "origin": "international", "difficulty": "challenging", "confusableGroup": null },
+  { "id": 37, "name": "Constantine", "imageUrl": "https://i.pravatar.cc/150?img=37", "origin": "international", "difficulty": "challenging", "confusableGroup": null },
+  { "id": 38, "name": "Theodore", "imageUrl": "https://i.pravatar.cc/150?img=38", "origin": "international", "difficulty": "challenging", "confusableGroup": null },
+  { "id": 39, "name": "Penelope", "imageUrl": "https://i.pravatar.cc/150?img=39", "origin": "international", "difficulty": "challenging", "confusableGroup": null },
+  { "id": 40, "name": "Leonardo", "imageUrl": "https://i.pravatar.cc/150?img=40", "origin": "international", "difficulty": "challenging", "confusableGroup": null },
+  { "id": 41, "name": "Alexander", "imageUrl": "https://i.pravatar.cc/150?img=41", "origin": "international", "difficulty": "varied", "confusableGroup": null },
+  { "id": 42, "name": "Isabella", "imageUrl": "https://i.pravatar.cc/150?img=42", "origin": "international", "difficulty": "varied", "confusableGroup": null },
+  { "id": 43, "name": "Benjamin", "imageUrl": "https://i.pravatar.cc/150?img=43", "origin": "international", "difficulty": "varied", "confusableGroup": null },
+  { "id": 44, "name": "Charlotte", "imageUrl": "https://i.pravatar.cc/150?img=44", "origin": "international", "difficulty": "varied", "confusableGroup": null },
+  { "id": 45, "name": "Lucas", "imageUrl": "https://i.pravatar.cc/150?img=45", "origin": "international", "difficulty": "varied", "confusableGroup": null },
+  { "id": 46, "name": "Amelia", "imageUrl": "https://i.pravatar.cc/150?img=46", "origin": "international", "difficulty": "varied", "confusableGroup": null },
+  { "id": 47, "name": "Henry", "imageUrl": "https://i.pravatar.cc/150?img=47", "origin": "international", "difficulty": "varied", "confusableGroup": null },
+  { "id": 48, "name": "Mia", "imageUrl": "https://i.pravatar.cc/150?img=48", "origin": "international", "difficulty": "varied", "confusableGroup": null },
+  { "id": 49, "name": "Gabriel", "imageUrl": "https://i.pravatar.cc/150?img=49", "origin": "international", "difficulty": "varied", "confusableGroup": null },
+  { "id": 50, "name": "Evelyn", "imageUrl": "https://i.pravatar.cc/150?img=50", "origin": "international", "difficulty": "varied", "confusableGroup": null },
+  { "id": 51, "name": "Oliver", "imageUrl": "https://i.pravatar.cc/150?img=51", "origin": "international", "difficulty": "varied", "confusableGroup": null },
+  { "id": 52, "name": "Harper", "imageUrl": "https://i.pravatar.cc/150?img=52", "origin": "international", "difficulty": "varied", "confusableGroup": null },
+  { "id": 53, "name": "Daniel", "imageUrl": "https://i.pravatar.cc/150?img=53", "origin": "international", "difficulty": "varied", "confusableGroup": null },
+  { "id": 54, "name": "Victoria", "imageUrl": "https://i.pravatar.cc/150?img=54", "origin": "international", "difficulty": "varied", "confusableGroup": null },
+  { "id": 55, "name": "Samuel", "imageUrl": "https://i.pravatar.cc/150?img=55", "origin": "international", "difficulty": "varied", "confusableGroup": null },
+  { "id": 56, "name": "Quỳnh", "imageUrl": "https://i.pravatar.cc/150?img=56", "origin": "vietnamese", "difficulty": "varied", "confusableGroup": null },
+  { "id": 57, "name": "Đức", "imageUrl": "https://i.pravatar.cc/150?img=57", "origin": "vietnamese", "difficulty": "varied", "confusableGroup": null },
+  { "id": 58, "name": "Hương", "imageUrl": "https://i.pravatar.cc/150?img=58", "origin": "vietnamese", "difficulty": "varied", "confusableGroup": null },
+  { "id": 59, "name": "Ngân", "imageUrl": "https://i.pravatar.cc/150?img=59", "origin": "vietnamese", "difficulty": "varied", "confusableGroup": null },
+  { "id": 60, "name": "Trâm", "imageUrl": "https://i.pravatar.cc/150?img=60", "origin": "vietnamese", "difficulty": "varied", "confusableGroup": null },
+  { "id": 61, "name": "Khoa", "imageUrl": "https://i.pravatar.cc/150?img=61", "origin": "vietnamese", "difficulty": "varied", "confusableGroup": null },
+  { "id": 62, "name": "Yến", "imageUrl": "https://i.pravatar.cc/150?img=62", "origin": "vietnamese", "difficulty": "varied", "confusableGroup": null },
+  { "id": 63, "name": "Thịnh", "imageUrl": "https://i.pravatar.cc/150?img=63", "origin": "vietnamese", "difficulty": "varied", "confusableGroup": null },
+  { "id": 64, "name": "Nga", "imageUrl": "https://i.pravatar.cc/150?img=64", "origin": "vietnamese", "difficulty": "varied", "confusableGroup": null },
+  { "id": 65, "name": "Khánh", "imageUrl": "https://i.pravatar.cc/150?img=65", "origin": "vietnamese", "difficulty": "varied", "confusableGroup": null },
+  { "id": 66, "name": "Bích", "imageUrl": "https://i.pravatar.cc/150?img=66", "origin": "vietnamese", "difficulty": "varied", "confusableGroup": null },
+  { "id": 67, "name": "Huy", "imageUrl": "https://i.pravatar.cc/150?img=67", "origin": "vietnamese", "difficulty": "varied", "confusableGroup": null },
+  { "id": 68, "name": "Phước", "imageUrl": "https://i.pravatar.cc/150?img=68", "origin": "vietnamese", "difficulty": "varied", "confusableGroup": null },
+  { "id": 69, "name": "Tuyền", "imageUrl": "https://i.pravatar.cc/150?img=69", "origin": "vietnamese", "difficulty": "varied", "confusableGroup": null },
+  { "id": 70, "name": "Duyên", "imageUrl": "https://i.pravatar.cc/150?img=70", "origin": "vietnamese", "difficulty": "varied", "confusableGroup": null },
+  { "id": 71, "name": "John", "imageUrl": "https://api.dicebear.com/7.x/avataaars/svg?seed=John", "origin": "international", "difficulty": "common", "confusableGroup": null },
+  { "id": 72, "name": "Mary", "imageUrl": "https://api.dicebear.com/7.x/avataaars/svg?seed=Mary", "origin": "international", "difficulty": "common", "confusableGroup": null },
+  { "id": 73, "name": "David", "imageUrl": "https://api.dicebear.com/7.x/avataaars/svg?seed=David", "origin": "international", "difficulty": "common", "confusableGroup": null },
+  { "id": 74, "name": "James", "imageUrl": "https://api.dicebear.com/7.x/avataaars/svg?seed=James", "origin": "international", "difficulty": "common", "confusableGroup": null },
+  { "id": 75, "name": "Emma", "imageUrl": "https://api.dicebear.com/7.x/avataaars/svg?seed=Emma", "origin": "international", "difficulty": "common", "confusableGroup": null },
+  { "id": 76, "name": "Michael", "imageUrl": "https://api.dicebear.com/7.x/avataaars/svg?seed=Michael", "origin": "international", "difficulty": "common", "confusableGroup": null },
+  { "id": 77, "name": "Emily", "imageUrl": "https://api.dicebear.com/7.x/avataaars/svg?seed=Emily", "origin": "international", "difficulty": "common", "confusableGroup": null },
+  { "id": 78, "name": "William", "imageUrl": "https://api.dicebear.com/7.x/avataaars/svg?seed=William", "origin": "international", "difficulty": "common", "confusableGroup": null },
+  { "id": 79, "name": "Robert", "imageUrl": "https://api.dicebear.com/7.x/avataaars/svg?seed=Robert", "origin": "international", "difficulty": "common", "confusableGroup": null },
+  { "id": 80, "name": "Jessica", "imageUrl": "https://api.dicebear.com/7.x/avataaars/svg?seed=Jessica", "origin": "international", "difficulty": "common", "confusableGroup": null },
+  { "id": 81, "name": "Thomas", "imageUrl": "https://api.dicebear.com/7.x/avataaars/svg?seed=Thomas", "origin": "international", "difficulty": "common", "confusableGroup": null },
+  { "id": 82, "name": "Grace", "imageUrl": "https://api.dicebear.com/7.x/avataaars/svg?seed=Grace", "origin": "international", "difficulty": "common", "confusableGroup": null },
+  { "id": 83, "name": "Paul", "imageUrl": "https://api.dicebear.com/7.x/avataaars/svg?seed=Paul", "origin": "international", "difficulty": "common", "confusableGroup": null },
+  { "id": 84, "name": "Lisa", "imageUrl": "https://api.dicebear.com/7.x/avataaars/svg?seed=Lisa", "origin": "international", "difficulty": "common", "confusableGroup": null },
+  { "id": 85, "name": "George", "imageUrl": "https://api.dicebear.com/7.x/avataaars/svg?seed=George", "origin": "international", "difficulty": "common", "confusableGroup": null },
+  { "id": 86, "name": "Linh", "imageUrl": "https://api.dicebear.com/7.x/avataaars/svg?seed=Linh", "origin": "vietnamese", "difficulty": "common", "confusableGroup": null },
+  { "id": 87, "name": "Tuấn", "imageUrl": "https://api.dicebear.com/7.x/avataaars/svg?seed=Tuan", "origin": "vietnamese", "difficulty": "common", "confusableGroup": null },
+  { "id": 88, "name": "Trang", "imageUrl": "https://api.dicebear.com/7.x/avataaars/svg?seed=Trang", "origin": "vietnamese", "difficulty": "common", "confusableGroup": null },
+  { "id": 89, "name": "Dũng", "imageUrl": "https://api.dicebear.com/7.x/avataaars/svg?seed=Dung", "origin": "vietnamese", "difficulty": "common", "confusableGroup": null },
+  { "id": 90, "name": "Mai", "imageUrl": "https://api.dicebear.com/7.x/avataaars/svg?seed=Mai", "origin": "vietnamese", "difficulty": "common", "confusableGroup": null },
+  { "id": 91, "name": "Nam", "imageUrl": "https://api.dicebear.com/7.x/avataaars/svg?seed=Nam", "origin": "vietnamese", "difficulty": "common", "confusableGroup": null },
+  { "id": 92, "name": "Hoa", "imageUrl": "https://api.dicebear.com/7.x/avataaars/svg?seed=Hoa", "origin": "vietnamese", "difficulty": "common", "confusableGroup": null },
+  { "id": 93, "name": "Phúc", "imageUrl": "https://api.dicebear.com/7.x/avataaars/svg?seed=Phuc", "origin": "vietnamese", "difficulty": "common", "confusableGroup": null },
+  { "id": 94, "name": "Thảo", "imageUrl": "https://api.dicebear.com/7.x/avataaars/svg?seed=Thao", "origin": "vietnamese", "difficulty": "common", "confusableGroup": null },
+  { "id": 95, "name": "Lan", "imageUrl": "https://api.dicebear.com/7.x/avataaars/svg?seed=Lan", "origin": "vietnamese", "difficulty": "common", "confusableGroup": null },
+  { "id": 96, "name": "Long", "imageUrl": "https://api.dicebear.com/7.x/avataaars/svg?seed=Long", "origin": "vietnamese", "difficulty": "common", "confusableGroup": null },
+  { "id": 97, "name": "Hùng", "imageUrl": "https://api.dicebear.com/7.x/avataaars/svg?seed=Hung", "origin": "vietnamese", "difficulty": "common", "confusableGroup": null },
+  { "id": 98, "name": "Minh", "imageUrl": "https://api.dicebear.com/7.x/avataaars/svg?seed=Minh", "origin": "vietnamese", "difficulty": "common", "confusableGroup": null },
+  { "id": 99, "name": "Ngọc", "imageUrl": "https://api.dicebear.com/7.x/avataaars/svg?seed=Ngoc", "origin": "vietnamese", "difficulty": "common", "confusableGroup": null },
+  { "id": 100, "name": "Hải", "imageUrl": "https://api.dicebear.com/7.x/avataaars/svg?seed=Hai", "origin": "vietnamese", "difficulty": "common", "confusableGroup": null },
+  { "id": 101, "name": "Vy", "imageUrl": "https://api.dicebear.com/7.x/avataaars/svg?seed=Vy", "origin": "vietnamese", "difficulty": "common", "confusableGroup": null },
+  { "id": 102, "name": "Bình", "imageUrl": "https://api.dicebear.com/7.x/avataaars/svg?seed=Binh", "origin": "vietnamese", "difficulty": "common", "confusableGroup": null },
+  { "id": 103, "name": "Chi", "imageUrl": "https://api.dicebear.com/7.x/avataaars/svg?seed=Chi", "origin": "vietnamese", "difficulty": "common", "confusableGroup": null },
+  { "id": 104, "name": "An", "imageUrl": "https://api.dicebear.com/7.x/avataaars/svg?seed=An", "origin": "vietnamese", "difficulty": "common", "confusableGroup": null },
+  { "id": 105, "name": "Duy", "imageUrl": "https://api.dicebear.com/7.x/avataaars/svg?seed=Duy", "origin": "vietnamese", "difficulty": "common", "confusableGroup": null }
 ]
