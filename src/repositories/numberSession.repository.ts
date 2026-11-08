@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import UserGameProgress from "../models/userGameProgress.js";
 import NumberSession, {
     type NumberGameMode,
     type NumberSessionDocument,
@@ -89,7 +90,7 @@ export interface NumberSessionRepository {
 
 export class MongoNumberSessionRepository implements NumberSessionRepository {
     async create(data: CreateNumberSessionData): Promise<NumberSessionDocument> {
-        return NumberSession.create(data);
+        return NumberSession.create({ ...data, sharedProgress: true });
     }
 
     async findByIdAndUser(id: string, userId: string): Promise<NumberSessionDocument | null> {
@@ -261,7 +262,7 @@ export class MongoNumberSessionRepository implements NumberSessionRepository {
         const [items, total] = await Promise.all([
             NumberSession.find(filter)
                 .select(
-                    "mode digitCount memorizeSeconds recallSeconds phase revision startedAt completedAt completionReason score accuracy memorizeUsedMs createdAt updatedAt",
+                    "mode level digitCount memorizeSeconds recallSeconds phase revision startedAt completedAt completionReason score accuracy memorizeUsedMs createdAt updatedAt",
                 )
                 .sort({ createdAt: -1, _id: -1 })
                 .skip(skip)
@@ -278,6 +279,7 @@ export class MongoNumberSessionRepository implements NumberSessionRepository {
             $or: [
                 { phase: "recalling", recallEndsAt: { $lte: now } },
                 { phase: "memorizing", memorizeEndsAt: { $lte: now } },
+                { sharedProgress: true, phase: "completed", progressRecordedAt: null },
             ],
         })
             .limit(limit)
@@ -288,18 +290,16 @@ export class MongoNumberSessionRepository implements NumberSessionRepository {
         if (!mongoose.Types.ObjectId.isValid(userId)) {
             return null;
         }
-        const best = await NumberSession.findOne({
-            userId,
-            mode: "practice",
-            phase: "completed",
-            level: { $ne: null },
-            $expr: { $eq: ["$correctCount", "$digitCount"] },
-        })
-            .sort({ level: -1 })
-            .select("level")
-            .lean<{ level: number }>()
-            .exec();
-        return best?.level ?? null;
+        const [best, shared] = await Promise.all([
+            NumberSession.findOne({
+                userId, mode: "practice", phase: "completed", level: { $ne: null },
+                $expr: { $eq: ["$correctCount", "$digitCount"] },
+            }).sort({ level: -1 }).select("level").lean<{ level: number }>().exec(),
+            UserGameProgress.findOne({ userId, gameName: "number" })
+                .select("unlockedLevel").lean<{ unlockedLevel: number }>().exec(),
+        ]);
+        const highest = Math.max(best?.level ?? 0, (shared?.unlockedLevel ?? 1) - 1);
+        return highest || null;
     }
 
     async findChallengeOn(userId: string, challengeDate: string): Promise<NumberSessionDocument | null> {

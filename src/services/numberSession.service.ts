@@ -1,4 +1,5 @@
 import { StatusCodes } from "http-status-codes";
+import { recordNumberCompletion } from "./numberSettlement.service.js";
 import { mongo } from "mongoose";
 import { NUMBER_LEVEL_DIGITS, NUMBER_MAX_LEVEL } from "../config/numbers.js";
 import { PROGRESS_TIME_ZONE } from "../config/progression.js";
@@ -284,6 +285,7 @@ export class NumberSessionService {
     constructor(
         private repository: NumberSessionRepository = numberSessionRepository,
         private clock: () => Date = () => new Date(),
+        private recordCompletion: (session: NumberSessionDocument) => Promise<void> = recordNumberCompletion,
     ) {}
 
     /**
@@ -294,6 +296,7 @@ export class NumberSessionService {
         now: Date = this.clock(),
     ): Promise<NumberSessionDocument> {
         if (session.phase === "completed") {
+            await this.recordCompletion(session);
             return session;
         }
 
@@ -322,6 +325,7 @@ export class NumberSessionService {
                             memorizeUsedMs: session.memorizeSeconds * 1000,
                         },
                     );
+                    if (updated?.phase === "completed") await this.recordCompletion(updated);
                     return updated ?? session;
                 } else {
                     // Hết giờ ghi nhớ, chuyển sang recall bắt đầu từ memorizeEndsAt
@@ -352,6 +356,7 @@ export class NumberSessionService {
                         accuracy: grading.accuracy,
                     },
                 );
+                if (updated?.phase === "completed") await this.recordCompletion(updated);
                 return updated ?? session;
             }
         }
@@ -895,10 +900,11 @@ export class NumberSessionService {
      * Chuyển đổi session sang format phản hồi client tùy theo phase hiện tại.
      * Tuyệt đối không để lộ originalDigits khi đang recalling hoặc trong danh sách.
      */
-    private formatSessionResponse(
+    private async formatSessionResponse(
         session: NumberSessionDocument,
         now: Date,
-    ): FormattedSessionResponse {
+    ): Promise<FormattedSessionResponse> {
+        if (session.phase === "completed") await this.recordCompletion(session);
         const base: FormattedSessionResponse = {
             id: session._id.toString(),
             mode: session.mode,

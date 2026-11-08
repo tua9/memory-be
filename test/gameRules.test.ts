@@ -39,7 +39,9 @@ test("game configs are internally consistent", () => {
 test("only configured games are accepted", () => {
     assert.equal(isConfiguredGame("card"), true);
     assert.equal(isConfiguredGame("image"), true);
-    assert.equal(isConfiguredGame("number"), false);
+    assert.equal(isConfiguredGame("number"), true);
+    assert.equal(isConfiguredGame("facename"), true);
+    assert.equal(isConfiguredGame("unknown"), false);
     assert.equal(isConfiguredGame("toString"), false);
     assert.equal(isConfiguredGame(1), false);
     assert.equal(parseGameName("card"), "card");
