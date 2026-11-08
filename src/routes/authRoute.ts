@@ -1,5 +1,6 @@
 import express from "express";
 import {
+    changePassword,
     googleAuth,
     refresh,
     setPassword,
@@ -17,5 +18,6 @@ router.post("/refresh", refresh);
 router.post("/logout", signOut);
 router.post("/google", googleAuth);
 router.post("/set-password", protectedRoute, setPassword);
+router.patch("/change-password", protectedRoute, changePassword);
 
 export default router;

@@ -24,4 +24,11 @@ export const env = {
     // Thời hạn tối đa của phiên khi người dùng không chọn "Duy trì đăng nhập"
     REFRESH_TOKEN_TTL_NO_REMEMBER: process.env.REFRESH_TOKEN_TTL_NO_REMEMBER || "1d",
     GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID,
+    // Gửi email (link đổi mật khẩu). Thiếu cấu hình thì API gửi link báo lỗi 503, không giả vờ đã gửi.
+    SMTP_HOST: process.env.SMTP_HOST?.trim() || "",
+    SMTP_PORT: Number(process.env.SMTP_PORT) || 587,
+    SMTP_USER: process.env.SMTP_USER?.trim() || "",
+    SMTP_PASS: process.env.SMTP_PASS || "",
+    // Tên hiển thị hoặc "Tên <địa chỉ>"; nếu bỏ trống dùng SMTP_USER
+    MAIL_FROM: process.env.MAIL_FROM?.trim() || "",
 };

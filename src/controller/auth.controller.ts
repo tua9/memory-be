@@ -93,3 +93,16 @@ export const setPassword: RequestHandler = asyncHandler(async (request, response
         message: "Password set successfully",
     });
 });
+
+export const changePassword: RequestHandler = asyncHandler(async (request, response) => {
+    const user = request.user;
+    if (!user) {
+        throw new ApiError(StatusCodes.UNAUTHORIZED, "Unauthorized");
+    }
+    await authService.changePassword(user._id.toString(), request.body);
+    clearAuthCookies(response);
+    response.status(StatusCodes.OK).json({
+        status: "success",
+        message: "Đổi mật khẩu thành công. Vui lòng đăng nhập lại.",
+    });
+});
