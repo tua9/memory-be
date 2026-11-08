@@ -5,8 +5,10 @@
 export const GAME_RESULTS = ["fail", "pass", "perfect"] as const;
 export type GameResult = (typeof GAME_RESULTS)[number];
 
-export const GAME_MODES = ["level", "custom"] as const;
+// daily: ván thử thách ngày, chỉ tạo qua /api/daily-challenge nên client không chọn được ở /api/game-sessions
+export const GAME_MODES = ["level", "custom", "daily"] as const;
 export type GameMode = (typeof GAME_MODES)[number];
+export const SELECTABLE_GAME_MODES = ["level", "custom"] as const satisfies readonly GameMode[];
 
 export interface GameConfig {
     // Số thẻ/hình cần nhớ ở từng level, phần tử đầu tiên là level 1

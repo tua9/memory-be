@@ -38,6 +38,8 @@ export interface GameSessionData {
     guestUnlockedLevel: { before: number; after: number } | null;
     // Hạn tự xoá của ván chưa nộp và của mọi ván của khách; ván đã hoàn thành của người đăng nhập không có
     expiresAt?: Date;
+    // Ngày "YYYY-MM-DD" của ván thử thách ngày; null với ván thường
+    challengeDate?: string | null;
 }
 
 export interface GameSessionDocument extends Document, GameSessionData {}
@@ -89,6 +91,7 @@ const gameSessionSchema = new mongoose.Schema<GameSessionDocument>(
         rewards: { type: mongoose.Schema.Types.Mixed, default: null },
         guestUnlockedLevel: { type: mongoose.Schema.Types.Mixed, default: null },
         expiresAt: { type: Date },
+        challengeDate: { type: String, default: null },
     },
     { collection: "game_sessions" },
 );
@@ -98,6 +101,13 @@ gameSessionSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 // Lịch sử ván của một người chơi, mới nhất trước, có hoặc không lọc theo game
 gameSessionSchema.index({ userId: 1, status: 1, completedAt: -1 });
 gameSessionSchema.index({ userId: 1, gameName: 1, status: 1, completedAt: -1 });
+// Thử thách ngày: mỗi tài khoản đúng một ván mỗi ngày (chặn cả hai yêu cầu bắt đầu gửi cùng lúc),
+// và bảng xếp hạng đọc các ván đã hoàn thành của một ngày
+gameSessionSchema.index(
+    { userId: 1, challengeDate: 1 },
+    { unique: true, partialFilterExpression: { challengeDate: { $type: "string" } } },
+);
+gameSessionSchema.index({ challengeDate: 1, status: 1 });
 
 const GameSession = mongoose.model<GameSessionDocument>("game_session", gameSessionSchema);
 export default GameSession;

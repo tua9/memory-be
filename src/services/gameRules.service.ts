@@ -2,7 +2,7 @@ import { StatusCodes } from "http-status-codes";
 import {
     CONFIGURED_GAME_NAMES,
     GAME_CONFIGS,
-    GAME_MODES,
+    SELECTABLE_GAME_MODES,
     GAME_RESULTS,
     type ConfiguredGameName,
     type GameConfig,
@@ -41,8 +41,8 @@ export interface GradedRound {
 const isInteger = (value: unknown): value is number =>
     typeof value === "number" && Number.isInteger(value);
 
-const isGameMode = (value: unknown): value is GameMode =>
-    typeof value === "string" && (GAME_MODES as readonly string[]).includes(value);
+const isSelectableMode = (value: unknown): value is (typeof SELECTABLE_GAME_MODES)[number] =>
+    typeof value === "string" && (SELECTABLE_GAME_MODES as readonly string[]).includes(value);
 
 const isResultAtLeast = (result: GameResult, minimum: GameResult): boolean =>
     GAME_RESULTS.indexOf(result) >= GAME_RESULTS.indexOf(minimum);
@@ -82,8 +82,8 @@ export const resolveRoundRules = (
 ): RoundRules => {
     const config = getGameConfig(gameName);
     const mode = input.mode ?? "level";
-    if (!isGameMode(mode)) {
-        throw new ApiError(StatusCodes.BAD_REQUEST, `mode must be one of: ${GAME_MODES.join(", ")}`);
+    if (!isSelectableMode(mode)) {
+        throw new ApiError(StatusCodes.BAD_REQUEST, `mode must be one of: ${SELECTABLE_GAME_MODES.join(", ")}`);
     }
 
     const memorizeSec = input.memorizeSec ?? config.defaultMemorizeSec;
