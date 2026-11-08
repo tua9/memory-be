@@ -23,37 +23,39 @@ test("FaceName: name normalization with Unicode NFC, trimming, lowercase, and di
 test("FaceName: scoring calculation, accuracy, and passing threshold", () => {
   const service = new FaceNameService();
 
-  // Create round with Level 1 (5 faces)
+  // Create round with Level 1 (6 faces)
   const round = service.createRound({ mode: "level", levelId: 1 });
-  assert.equal(round.people.length, 5);
+  assert.equal(round.people.length, 6);
 
   const p1 = round.people[0]!;
   const p2 = round.people[1]!;
   const p3 = round.people[2]!;
   const p4 = round.people[3]!;
   const p5 = round.people[4]!;
+  const p6 = round.people[5]!;
 
-  // Case 1: 4 correct, 1 wrong
-  // Score = 4 * (+1) + 1 * (-0.5) = 3.5
-  // Max score = 5. Accuracy = 4/5 * 100 = 80%.
-  // 3.5 / 5 = 70% -> isPassed should be true
+  // Case 1: 5 correct, 1 wrong
+  // Score = 5 * (+1) + 1 * (-0.5) = 4.5
+  // Max score = 6. Required score for level 1 is 4.
+  // 4.5 >= 4 -> isPassed should be true
   const submitResult = service.submitRound(round.roundId, {
     answers: [
       { personId: p1.id, answer: p1.name },
       { personId: p2.id, answer: p2.name.toUpperCase() }, // Case-insensitive
       { personId: p3.id, answer: `  ${p3.name}  ` }, // Trimmed
       { personId: p4.id, answer: p4.name },
-      { personId: p5.id, answer: "WrongName" },
+      { personId: p5.id, answer: p5.name },
+      { personId: p6.id, answer: "WrongName" },
     ],
     timeUsedSeconds: 45,
   });
 
-  assert.equal(submitResult.correctCount, 4);
+  assert.equal(submitResult.correctCount, 5);
   assert.equal(submitResult.incorrectCount, 1);
   assert.equal(submitResult.blankCount, 0);
-  assert.equal(submitResult.score, 3.5);
-  assert.equal(submitResult.maxScore, 5);
-  assert.equal(submitResult.accuracy, 80);
+  assert.equal(submitResult.score, 4.5);
+  assert.equal(submitResult.maxScore, 6);
+  assert.equal(submitResult.accuracy, 83.3);
   assert.equal(submitResult.isPassed, true);
   assert.equal(submitResult.nextLevelUnlocked, true);
 });
@@ -67,20 +69,22 @@ test("FaceName: scoring handles blank answers (0 points) and negative scores", (
   const p3 = round.people[2]!;
   const p4 = round.people[3]!;
   const p5 = round.people[4]!;
+  const p6 = round.people[5]!;
 
-  // 1 correct (+1), 1 blank (0), 3 wrong (-1.5) => Score = -0.5
+  // 1 correct (+1), 2 blank (0), 3 wrong (-1.5) => Score = -0.5
   const result = service.submitRound(round.roundId, {
     answers: [
       { personId: p1.id, answer: p1.name },
       { personId: p2.id, answer: "" }, // blank
-      { personId: p3.id, answer: "Wrong1" },
-      { personId: p4.id, answer: "Wrong2" },
-      { personId: p5.id, answer: "Wrong3" },
+      { personId: p3.id, answer: "" }, // blank
+      { personId: p4.id, answer: "Wrong1" },
+      { personId: p5.id, answer: "Wrong2" },
+      { personId: p6.id, answer: "Wrong3" },
     ],
   });
 
   assert.equal(result.correctCount, 1);
-  assert.equal(result.blankCount, 1);
+  assert.equal(result.blankCount, 2);
   assert.equal(result.incorrectCount, 3);
   assert.equal(result.score, -0.5);
   assert.equal(result.isPassed, false);
@@ -89,33 +93,53 @@ test("FaceName: scoring handles blank answers (0 points) and negative scores", (
 test("FaceName: round generation per level matches faceCount and categories", () => {
   const service = new FaceNameService();
 
-  // Level 1: 5 faces, common
+  // Level 1: 6 faces, common
   const l1 = service.createRound({ mode: "level", levelId: 1 });
-  assert.equal(l1.people.length, 5);
+  assert.equal(l1.people.length, 6);
   // Verify unique person IDs
   const l1Ids = new Set(l1.people.map((p) => p.id));
-  assert.equal(l1Ids.size, 5);
+  assert.equal(l1Ids.size, 6);
 
   // Level 2: 8 faces, common
   const l2 = service.createRound({ mode: "level", levelId: 2 });
   assert.equal(l2.people.length, 8);
 
-  // Level 3: 12 faces, varied (mix of vietnamese and international)
+  // Level 3: 10 faces, varied (mix of vietnamese and international)
   const l3 = service.createRound({ mode: "level", levelId: 3 });
-  assert.equal(l3.people.length, 12);
+  assert.equal(l3.people.length, 10);
 
-  // Level 4: 20 faces, international
+  // Level 4: 12 faces, varied
   const l4 = service.createRound({ mode: "level", levelId: 4 });
-  assert.equal(l4.people.length, 20);
+  assert.equal(l4.people.length, 12);
 
-  // Level 5: 30 faces, international challenging
+  // Level 5: 14 faces, international
   const l5 = service.createRound({ mode: "level", levelId: 5 });
-  assert.equal(l5.people.length, 30);
-  const l5Ids = new Set(l5.people.map((p) => p.id));
-  assert.equal(l5Ids.size, 30);
+  assert.equal(l5.people.length, 14);
+
+  // Level 6: 16 faces
+  const l6 = service.createRound({ mode: "level", levelId: 6 });
+  assert.equal(l6.people.length, 16);
+
+  // Level 7: 18 faces
+  const l7 = service.createRound({ mode: "level", levelId: 7 });
+  assert.equal(l7.people.length, 18);
+
+  // Level 8: 22 faces
+  const l8 = service.createRound({ mode: "level", levelId: 8 });
+  assert.equal(l8.people.length, 22);
+
+  // Level 9: 26 faces
+  const l9 = service.createRound({ mode: "level", levelId: 9 });
+  assert.equal(l9.people.length, 26);
+
+  // Level 10: 30 faces, international challenging
+  const l10 = service.createRound({ mode: "level", levelId: 10 });
+  assert.equal(l10.people.length, 30);
+  const l10Ids = new Set(l10.people.map((p) => p.id));
+  assert.equal(l10Ids.size, 30);
 
   // No exposed metadata in client person objects
-  for (const person of l5.people) {
+  for (const person of l10.people) {
     assert.equal(typeof person.id, "number");
     assert.equal(typeof person.name, "string");
     assert.equal(typeof person.imageUrl, "string");
@@ -198,7 +222,7 @@ test("FaceName: submission validation rejects duplicate IDs, unknown IDs, and du
 
   // Successful first submission
   const res = service.submitRound(round.roundId, { answers: [] });
-  assert.equal(res.blankCount, 5);
+  assert.equal(res.blankCount, 6);
 
   // Duplicate submission rejected
   assert.throws(

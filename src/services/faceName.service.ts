@@ -24,17 +24,19 @@ export interface FaceNameLevelConfig {
   memorizeSeconds: number;
   recallSeconds: number;
   nameType: string;
+  requiredScore: number;
   unlockThreshold: number;
 }
 
 export const FACENAME_LEVELS: readonly FaceNameLevelConfig[] = [
   {
     levelId: 1,
-    faceCount: 5,
+    faceCount: 6,
     memorizeSeconds: 60,
     recallSeconds: 120,
     nameType: "Tên phổ biến",
-    unlockThreshold: 0.7,
+    requiredScore: 4,
+    unlockThreshold: 4 / 6,
   },
   {
     levelId: 2,
@@ -42,31 +44,80 @@ export const FACENAME_LEVELS: readonly FaceNameLevelConfig[] = [
     memorizeSeconds: 60,
     recallSeconds: 150,
     nameType: "Tên phổ biến",
-    unlockThreshold: 0.7,
+    requiredScore: 6,
+    unlockThreshold: 6 / 8,
   },
   {
     levelId: 3,
+    faceCount: 10,
+    memorizeSeconds: 60,
+    recallSeconds: 180,
+    nameType: "Tên đa dạng (Việt + Quốc tế)",
+    requiredScore: 7,
+    unlockThreshold: 7 / 10,
+  },
+  {
+    levelId: 4,
     faceCount: 12,
     memorizeSeconds: 60,
     recallSeconds: 180,
     nameType: "Tên đa dạng (Việt + Quốc tế)",
-    unlockThreshold: 0.7,
-  },
-  {
-    levelId: 4,
-    faceCount: 20,
-    memorizeSeconds: 60,
-    recallSeconds: 240,
-    nameType: "Tên quốc tế phong phú",
-    unlockThreshold: 0.7,
+    requiredScore: 8,
+    unlockThreshold: 8 / 12,
   },
   {
     levelId: 5,
-    faceCount: 30,
+    faceCount: 14,
+    memorizeSeconds: 60,
+    recallSeconds: 210,
+    nameType: "Tên quốc tế",
+    requiredScore: 10,
+    unlockThreshold: 10 / 14,
+  },
+  {
+    levelId: 6,
+    faceCount: 16,
+    memorizeSeconds: 60,
+    recallSeconds: 210,
+    nameType: "Tên quốc tế phong phú",
+    requiredScore: 11,
+    unlockThreshold: 11 / 16,
+  },
+  {
+    levelId: 7,
+    faceCount: 18,
     memorizeSeconds: 60,
     recallSeconds: 240,
+    nameType: "Tên quốc tế phong phú",
+    requiredScore: 12,
+    unlockThreshold: 12 / 18,
+  },
+  {
+    levelId: 8,
+    faceCount: 22,
+    memorizeSeconds: 60,
+    recallSeconds: 240,
+    nameType: "Tên quốc tế thử thách",
+    requiredScore: 15,
+    unlockThreshold: 15 / 22,
+  },
+  {
+    levelId: 9,
+    faceCount: 26,
+    memorizeSeconds: 60,
+    recallSeconds: 270,
     nameType: "Tên quốc tế dễ nhầm lẫn",
-    unlockThreshold: 0.7,
+    requiredScore: 18,
+    unlockThreshold: 18 / 26,
+  },
+  {
+    levelId: 10,
+    faceCount: 30,
+    memorizeSeconds: 60,
+    recallSeconds: 300,
+    nameType: "Tên quốc tế dễ nhầm lẫn",
+    requiredScore: 20,
+    unlockThreshold: 20 / 30,
   },
 ] as const;
 
@@ -188,8 +239,9 @@ export class FaceNameService {
           selected = this.pickUniqueNames(pool, count);
           break;
         }
-        case 3: {
-          // L3: difficulty=varied, mix of vietnamese + international
+        case 3:
+        case 4: {
+          // L3, L4: difficulty=varied, mix of vietnamese + international
           const vnPool = this.people.filter((p) => p.origin === "vietnamese" && p.difficulty === "varied");
           const intlPool = this.people.filter((p) => p.origin === "international" && p.difficulty === "varied");
           const half = Math.floor(count / 2);
@@ -202,16 +254,20 @@ export class FaceNameService {
           selected = this.shuffle([...chosenVn, ...chosenIntl]);
           break;
         }
-        case 4: {
-          // L4: origin=international, difficulty in (varied, challenging)
+        case 5:
+        case 6:
+        case 7: {
+          // L5, L6, L7: origin=international, difficulty in (varied, challenging)
           const pool = this.people.filter(
             (p) => p.origin === "international" && (p.difficulty === "varied" || p.difficulty === "challenging"),
           );
           selected = this.pickUniqueNames(pool, count);
           break;
         }
-        case 5: {
-          // L5: origin=international, difficulty=challenging, >= 5 confusable pairs when possible
+        case 8:
+        case 9:
+        case 10: {
+          // L8, L9, L10: origin=international, difficulty=challenging, with confusable pairs
           const pool = this.people.filter((p) => p.origin === "international" && p.difficulty === "challenging");
           selected = this.pickLevel5Challenging(pool, count);
           break;
@@ -331,8 +387,8 @@ export class FaceNameService {
 
     if (input.mode === "level") {
       const levelId = Number(input.levelId);
-      if (!levelId || isNaN(levelId) || levelId < 1 || levelId > 5) {
-        throw new ApiError(StatusCodes.BAD_REQUEST, "levelId must be between 1 and 5");
+      if (!levelId || isNaN(levelId) || levelId < 1 || levelId > 10) {
+        throw new ApiError(StatusCodes.BAD_REQUEST, "levelId must be between 1 and 10");
       }
       const config = FACENAME_LEVELS.find((l) => l.levelId === levelId)!;
       const people = this.generateRoundPeople(levelId);
@@ -527,8 +583,13 @@ export class FaceNameService {
     const score = internalPoints / 2; // integer internal / 2
     const accuracy = Math.round((correctCount / totalFaces) * 1000) / 10; // e.g. 83.3%
 
-    // Pass threshold: score >= 70% of maxScore
-    const isPassed = score >= 0.7 * maxScore;
+    const config =
+      round.mode === "level" && typeof round.levelId === "number"
+        ? FACENAME_LEVELS.find((l) => l.levelId === round.levelId)
+        : undefined;
+
+    // Pass threshold based on level's requiredScore or 70% for free
+    const isPassed = config ? score >= config.requiredScore : score >= 0.7 * maxScore;
 
     round.isSubmitted = true;
 
@@ -538,7 +599,7 @@ export class FaceNameService {
         : Math.round((now - round.startedAt) / 1000);
 
     const nextLevelUnlocked =
-      round.mode === "level" && isPassed && typeof round.levelId === "number" && round.levelId < 5;
+      round.mode === "level" && isPassed && typeof round.levelId === "number" && round.levelId < 10;
 
     return {
       roundId: round.roundId,
