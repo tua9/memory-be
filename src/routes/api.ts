@@ -8,6 +8,7 @@ import gameCatalogRoute from "./gameCatalogRoute.js";
 import dailyChallengeRoute from "./dailyChallengeRoute.js";
 import numberSessionRoute from "./numberSessionRoute.js";
 import faceNameRoute from "./faceNameRoute.js";
+import passwordResetRoute from "./passwordResetRoute.js";
 
 const router = express.Router();
 
@@ -16,6 +17,7 @@ router.get("/", (_request, response) => {
 });
 
 router.use("/auth", authRoute);
+router.use("/password-reset", passwordResetRoute);
 router.use("/profile", profileRoute);
 router.use("/game-sessions", gameSessionRoute);
 router.use("/game-sessions", gameHistoryRoute);
