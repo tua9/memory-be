@@ -17,7 +17,7 @@ test("starting a round with the old record-game payload is rejected instead of c
 });
 
 test("starting a round needs a JSON object with a configured game", async () => {
-    for (const body of [undefined, "card", ["card"], {}, { gameName: "number" }]) {
+    for (const body of [undefined, "card", ["card"], {}, { gameName: "unknown" }]) {
         await assert.rejects(gameSessionService.startRound({ userId: TEST_USER_ID }, body), isBadRequest, JSON.stringify(body));
     }
 });

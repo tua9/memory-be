@@ -2,6 +2,9 @@
 // frontend đọc các giá trị này qua API thay vì tự định nghĩa.
 
 // Sắp xếp từ thấp đến cao để so sánh kết quả
+import { FACENAME_LEVELS } from "./facename.js";
+import { NUMBER_LEVEL_DIGITS } from "./numbers.js";
+
 export const GAME_RESULTS = ["fail", "pass", "perfect"] as const;
 export type GameResult = (typeof GAME_RESULTS)[number];
 
@@ -22,6 +25,10 @@ export interface GameConfig {
     passAccuracy: number;
     // Kết quả tối thiểu để mở level tiếp theo
     unlockOn: Exclude<GameResult, "fail">;
+    recallSecPerLevel?: readonly number[];
+    requiredScorePerLevel?: readonly number[];
+    customTimeRange?: { min: number; max: number };
+    wrongAnswerPenalty?: number;
 }
 
 export const GAME_CONFIGS = {
@@ -42,6 +49,29 @@ export const GAME_CONFIGS = {
         recallSec: 180,
         passAccuracy: 0.7,
         unlockOn: "perfect",
+    },
+    number: {
+        itemsPerLevel: NUMBER_LEVEL_DIGITS,
+        customItems: { min: 4, max: 80 },
+        memorizeSecOptions: [30, 60, 120, 300],
+        defaultMemorizeSec: 60,
+        recallSec: 300,
+        passAccuracy: 0.7,
+        unlockOn: "perfect",
+        customTimeRange: { min: 10, max: 600 },
+    },
+    facename: {
+        itemsPerLevel: FACENAME_LEVELS.map((level) => level.faceCount),
+        customItems: { min: 3, max: 30 },
+        memorizeSecOptions: [60],
+        defaultMemorizeSec: 60,
+        recallSec: 120,
+        recallSecPerLevel: FACENAME_LEVELS.map((level) => level.recallSeconds),
+        requiredScorePerLevel: FACENAME_LEVELS.map((level) => level.requiredScore),
+        customTimeRange: { min: 10, max: 300 },
+        wrongAnswerPenalty: 0.5,
+        passAccuracy: 0.7,
+        unlockOn: "pass",
     },
 } as const satisfies Record<string, GameConfig>;
 

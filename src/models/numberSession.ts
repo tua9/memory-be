@@ -17,6 +17,8 @@ export interface NumberSessionDocument extends Document {
     level: number | null;
     // Ngày "YYYY-MM-DD" (giờ Việt Nam) của ván thử thách; null với ván luyện tập
     challengeDate: string | null;
+    sharedProgress?: boolean;
+    progressRecordedAt?: Date | null;
     digitCount: number;
     memorizeSeconds: number;
     recallSeconds: number;
@@ -62,6 +64,8 @@ const numberSessionSchema = new mongoose.Schema<NumberSessionDocument>(
             type: String,
             default: null,
         },
+        sharedProgress: { type: Boolean, default: false },
+        progressRecordedAt: { type: Date, default: null },
         digitCount: {
             type: Number,
             required: true,
@@ -171,6 +175,7 @@ numberSessionSchema.index({ userId: 1, phase: 1, createdAt: -1 });
 
 // Cấp đã mở: tìm ván hoàn hảo ở cấp cao nhất của một người chơi
 numberSessionSchema.index({ userId: 1, level: -1, phase: 1 });
+numberSessionSchema.index({ sharedProgress: 1, phase: 1, progressRecordedAt: 1 });
 // Thử thách: mỗi tài khoản đúng một ván mỗi ngày, kể cả khi hai yêu cầu bắt đầu gửi cùng lúc
 numberSessionSchema.index(
     { userId: 1, challengeDate: 1 },

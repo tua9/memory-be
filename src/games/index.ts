@@ -3,6 +3,8 @@ import type { ConfiguredGameName } from "../config/games.js";
 import ApiError from "../utils/ApiError.js";
 import { cardEngine } from "./card.js";
 import { imageEngine } from "./image.js";
+import { numberEngine } from "./number.js";
+import { faceNameEngine } from "./facename.js";
 import type { GameEngine } from "./types.js";
 
 export type { GameEngine, ItemView } from "./types.js";
@@ -10,6 +12,8 @@ export type { GameEngine, ItemView } from "./types.js";
 const GAME_ENGINES: Record<ConfiguredGameName, GameEngine> = {
     card: cardEngine,
     image: imageEngine,
+    number: numberEngine,
+    facename: faceNameEngine,
 };
 
 export const getGameEngine = (gameName: ConfiguredGameName): GameEngine => GAME_ENGINES[gameName];
@@ -21,6 +25,7 @@ export const parseAnswers = (
     items: readonly string[],
     answers: unknown,
 ): (string | null)[] => {
+    if (engine.parseAnswers) return engine.parseAnswers(items, answers);
     if (!Array.isArray(answers) || answers.length !== items.length) {
         throw new ApiError(StatusCodes.BAD_REQUEST, `answers must be an array of ${items.length} items`);
     }

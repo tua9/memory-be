@@ -48,7 +48,8 @@ const testAuthMiddleware: RequestHandler = (request, _response, next) => {
 
 const repository = new MongoNumberSessionRepository();
 const testClock = () => new Date(mockTime.getTime());
-const service = new NumberSessionService(repository, testClock);
+// The Numbers-only integration suite isolates its lifecycle; shared rewards have their own integration suite.
+const service = new NumberSessionService(repository, testClock, async () => {});
 
 const startTestServer = async () => {
     const app = express();
@@ -89,7 +90,7 @@ test("Mongo progress persists perfect levels and enforces one concurrent daily c
         const round = await service.createSession(USER_B_ID, { level: 1 });
         const recall = await service.startRecall(USER_B_ID, round.id);
         await service.submitSession(USER_B_ID, round.id, { revision: recall.revision, answers: round.digits });
-        const restarted = new NumberSessionService(new MongoNumberSessionRepository(), testClock);
+        const restarted = new NumberSessionService(new MongoNumberSessionRepository(), testClock, async () => {});
         assert.equal((await restarted.getProgress(USER_B_ID)).unlockedLevel, 2);
         assert.equal((await restarted.createSession(USER_B_ID, { level: 2 })).digitCount, 12);
 
