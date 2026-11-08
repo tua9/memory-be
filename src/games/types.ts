@@ -9,8 +9,8 @@ export interface ItemView {
 // Phần riêng của từng game: sinh đề, lựa chọn khi nhớ lại và cách hiển thị item
 export interface GameEngine {
     gameName: ConfiguredGameName;
-    // Sinh bộ item cần nhớ, không có item trùng nhau
-    generateItems(count: number): string[];
+    // Sinh bộ item cần nhớ, không có item trùng nhau; level null với ván tự chọn số lượng
+    generateItems(count: number, level: number | null): string[];
     // Các lựa chọn ở phase nhớ lại; câu trả lời hợp lệ phải nằm trong danh sách này
     buildRecallOptions(items: readonly string[]): string[];
     toView(code: string): ItemView;

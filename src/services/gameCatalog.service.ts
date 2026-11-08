@@ -1,5 +1,7 @@
 import { CONFIGURED_GAME_NAMES, type ConfiguredGameName, type GameResult } from "../config/games.js";
+import GuestProgress, { type GuestProgressData } from "../models/guestProgress.js";
 import UserGameProgress, { type GameProgress } from "../models/userGameProgress.js";
+import type { PlayerRef } from "../utils/request.js";
 import { getGameConfig, getMaxLevel } from "./gameRules.service.js";
 
 export interface GameLevelView {
@@ -7,7 +9,7 @@ export interface GameLevelView {
     itemCount: number;
 }
 
-// Tiến độ của người chơi trong một game; null với khách
+// Tiến độ của người chơi trong một game; khách chỉ có level đã mở (giữ tạm), không có kỷ lục
 export interface PlayerGameView {
     unlockedLevel: number;
     bestLevel: number | null;
@@ -25,26 +27,33 @@ export interface GameCatalogItem {
     recallSec: number;
     passAccuracy: number;
     unlockOn: Exclude<GameResult, "fail">;
+    // null với khách chưa chơi ván nào
     player: PlayerGameView | null;
 }
 
 export type StoredGameProgress = Pick<GameProgress, "unlockedLevel" | "records" | "stats">;
 
 export interface GameCatalogService {
-    // userId null: khách, không có tiến độ
-    listGames(userId: string | null): Promise<GameCatalogItem[]>;
+    // player null: khách chưa có cookie, không có tiến độ
+    listGames(player: PlayerRef | null): Promise<GameCatalogItem[]>;
 }
 
-const toPlayerView = (gameName: ConfiguredGameName, progress: StoredGameProgress | undefined): PlayerGameView => ({
+const toPlayerView = (gameName: ConfiguredGameName, player: PlayerGameView | undefined): PlayerGameView => ({
     // Config có thể bị giảm số level sau này, nên không trả level đã mở vượt quá level cao nhất
-    unlockedLevel: Math.min(progress?.unlockedLevel ?? 1, getMaxLevel(gameName)),
-    bestLevel: progress?.records.bestLevel ?? null,
-    played: progress?.stats.played ?? 0,
+    unlockedLevel: Math.min(player?.unlockedLevel ?? 1, getMaxLevel(gameName)),
+    bestLevel: player?.bestLevel ?? null,
+    played: player?.played ?? 0,
+});
+
+export const fromStoredProgress = (progress: StoredGameProgress): PlayerGameView => ({
+    unlockedLevel: progress.unlockedLevel,
+    bestLevel: progress.records.bestLevel,
+    played: progress.stats.played,
 });
 
 // Luật chơi lấy từ config/games.ts để frontend không phải tự định nghĩa số thẻ, thời gian hay level
 export const buildGameCatalog = (
-    progressByGame: Partial<Record<ConfiguredGameName, StoredGameProgress>> | null,
+    playerByGame: Partial<Record<ConfiguredGameName, PlayerGameView>> | null,
 ): GameCatalogItem[] =>
     CONFIGURED_GAME_NAMES.map((gameName) => {
         const config = getGameConfig(gameName);
@@ -58,19 +67,33 @@ export const buildGameCatalog = (
             recallSec: config.recallSec,
             passAccuracy: config.passAccuracy,
             unlockOn: config.unlockOn,
-            player: progressByGame ? toPlayerView(gameName, progressByGame[gameName]) : null,
+            player: playerByGame ? toPlayerView(gameName, playerByGame[gameName]) : null,
         };
     });
 
-const listGames: GameCatalogService["listGames"] = async (userId) => {
-    if (!userId) {
+const listGames: GameCatalogService["listGames"] = async (player) => {
+    if (!player) {
         return buildGameCatalog(null);
     }
-    const progress = await UserGameProgress.find({ userId })
-        .select("gameName unlockedLevel records stats")
-        .lean<(StoredGameProgress & { gameName: ConfiguredGameName })[]>()
+    if ("userId" in player) {
+        const progress = await UserGameProgress.find({ userId: player.userId })
+            .select("gameName unlockedLevel records stats")
+            .lean<(StoredGameProgress & { gameName: ConfiguredGameName })[]>()
+            .exec();
+        return buildGameCatalog(Object.fromEntries(progress.map((item) => [item.gameName, fromStoredProgress(item)])));
+    }
+    const progress = await GuestProgress.find({ guestId: player.guestId })
+        .select("gameName unlockedLevel played")
+        .lean<Pick<GuestProgressData, "gameName" | "unlockedLevel" | "played">[]>()
         .exec();
-    return buildGameCatalog(Object.fromEntries(progress.map((item) => [item.gameName, item])));
+    return buildGameCatalog(
+        Object.fromEntries(
+            progress.map((item) => [
+                item.gameName,
+                { unlockedLevel: item.unlockedLevel, bestLevel: null, played: item.played },
+            ]),
+        ),
+    );
 };
 
 export const gameCatalogService: GameCatalogService = { listGames };

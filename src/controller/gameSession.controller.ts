@@ -1,4 +1,4 @@
-import type { RequestHandler } from "express";
+import type { Request, RequestHandler } from "express";
 import { StatusCodes } from "http-status-codes";
 import { asyncHandler } from "../middlewares/asyncHandler.js";
 import ApiError from "../utils/ApiError.js";
@@ -6,7 +6,22 @@ import {
   gameSessionService,
   type GameSessionService,
 } from "../services/gameSession.service.js";
-import { requireUserId, routeParam } from "../utils/request.js";
+import { setGuestCookie } from "../utils/cookies.js";
+import {
+  createGuestId,
+  readPlayer,
+  routeParam,
+  type PlayerRef,
+} from "../utils/request.js";
+
+// Chưa đăng nhập và chưa có cookie khách thì không thể sở hữu ván nào: trả 404 như ván của người khác
+const requirePlayer = (request: Request): PlayerRef => {
+  const player = readPlayer(request);
+  if (!player) {
+    throw new ApiError(StatusCodes.NOT_FOUND, "Game session not found");
+  }
+  return player;
+};
 
 export const createGameSessionController = (
   service: GameSessionService = gameSessionService,
@@ -15,12 +30,13 @@ export const createGameSessionController = (
   startRecall: RequestHandler;
   submitRound: RequestHandler;
 } => ({
-  // POST /api/game-sessions
+  // POST /api/game-sessions: khách lần đầu chơi được cấp cookie guestId, các lần sau được gia hạn
   startRound: asyncHandler(async (request, response) => {
-    const session = await service.startRound(
-      requireUserId(request),
-      request.body,
-    );
+    const player = readPlayer(request) ?? { guestId: createGuestId() };
+    if ("guestId" in player) {
+      setGuestCookie(response, player.guestId);
+    }
+    const session = await service.startRound(player, request.body);
     response.status(StatusCodes.CREATED).json({
       status: "success",
       message: "Game round started",
@@ -31,7 +47,7 @@ export const createGameSessionController = (
   // POST /api/game-sessions/:sessionId/recall
   startRecall: asyncHandler(async (request, response) => {
     const session = await service.startRecall(
-      requireUserId(request),
+      requirePlayer(request),
       routeParam(request, "sessionId"),
     );
     response.status(StatusCodes.OK).json({
@@ -44,7 +60,7 @@ export const createGameSessionController = (
   // POST /api/game-sessions/:sessionId/submit
   submitRound: asyncHandler(async (request, response) => {
     const session = await service.submitRound(
-      requireUserId(request),
+      requirePlayer(request),
       routeParam(request, "sessionId"),
       request.body,
     );

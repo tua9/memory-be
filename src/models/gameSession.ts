@@ -13,8 +13,10 @@ export const GAME_SESSION_STATUSES = ["memorizing", "recalling", "completed", "e
 export type GameSessionStatus = (typeof GAME_SESSION_STATUSES)[number];
 
 // Một ván chơi. Mọi mốc thời gian và kết quả đều do server ghi, client không gửi lên.
+// Ván của người đã đăng nhập có userId; ván của khách có guestId (cookie) và luôn có expiresAt nên được xoá sau một thời gian.
 export interface GameSessionData {
-    userId: Types.ObjectId;
+    userId: Types.ObjectId | null;
+    guestId: string | null;
     gameName: ConfiguredGameName;
     status: GameSessionStatus;
     rules: StoredRoundRules;
@@ -30,8 +32,11 @@ export interface GameSessionData {
     correctItems: number | null;
     accuracy: number | null;
     result: GameResult | null;
+    // Chỉ ván của người đã đăng nhập có phần thưởng
     rewards: RoundRewards | null;
-    // Hạn tự xoá của ván chưa nộp; bỏ đi khi ván hoàn thành
+    // Ván của khách không có phần thưởng, chỉ ghi level đã mở trước và sau ván
+    guestUnlockedLevel: { before: number; after: number } | null;
+    // Hạn tự xoá của ván chưa nộp và của mọi ván của khách; ván đã hoàn thành của người đăng nhập không có
     expiresAt?: Date;
 }
 
@@ -55,8 +60,9 @@ const gameSessionSchema = new mongoose.Schema<GameSessionDocument>(
         userId: {
             type: mongoose.Schema.Types.ObjectId,
             ref: "user",
-            required: true,
+            default: null,
         },
+        guestId: { type: String, default: null },
         gameName: {
             type: String,
             required: true,
@@ -81,12 +87,13 @@ const gameSessionSchema = new mongoose.Schema<GameSessionDocument>(
         result: { type: String, enum: GAME_RESULTS, default: null },
         // Bản chụp phần thưởng lúc nộp bài, chỉ ghi một lần nên không cần schema chi tiết
         rewards: { type: mongoose.Schema.Types.Mixed, default: null },
+        guestUnlockedLevel: { type: mongoose.Schema.Types.Mixed, default: null },
         expiresAt: { type: Date },
     },
     { collection: "game_sessions" },
 );
 
-// Ván chưa nộp tự bị xoá khi tới expiresAt; ván đã hoàn thành không còn trường này nên được giữ lại
+// Ván chưa nộp và ván của khách tự bị xoá khi tới expiresAt; ván đã hoàn thành của người đăng nhập được giữ lại
 gameSessionSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 // Lịch sử ván của một người chơi, mới nhất trước, có hoặc không lọc theo game
 gameSessionSchema.index({ userId: 1, status: 1, completedAt: -1 });

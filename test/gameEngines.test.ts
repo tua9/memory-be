@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { GAME_CONFIGS } from "../src/config/games.js";
+import { SEED_IMAGES } from "../src/data/seedImages.js";
 import { CARD_CODES, cardEngine } from "../src/games/card.js";
 import { imageEngine } from "../src/games/image.js";
 import { getGameEngine, parseAnswers } from "../src/games/index.js";
@@ -20,13 +22,13 @@ test("the card deck has 52 unique codes", () => {
 });
 
 test("card rounds draw unique cards from the deck", () => {
-    const items = cardEngine.generateItems(15);
+    const items = cardEngine.generateItems(15, 3);
     assert.equal(items.length, 15);
     assert.equal(new Set(items).size, 15);
     assert.ok(items.every((code) => CARD_CODES.includes(code)));
-    assert.equal(cardEngine.generateItems(52).length, 52);
+    assert.equal(cardEngine.generateItems(52, null).length, 52);
     for (const count of [0, 53, 2.5]) {
-        assert.throws(() => cardEngine.generateItems(count), RangeError);
+        assert.throws(() => cardEngine.generateItems(count, null), RangeError);
     }
 });
 
@@ -35,17 +37,43 @@ test("card recall offers the whole deck", () => {
     assert.deepEqual(cardEngine.toView("QD"), { code: "QD" });
 });
 
-test("image rounds generate unique codes and recall offers the same images shuffled", () => {
-    const items = imageEngine.generateItems(10);
+const imagesOfLevel = (level: number) => SEED_IMAGES.filter((image) => image.level === level);
+
+test("every image level has enough distinct images for its rounds", () => {
+    assert.equal(new Set(SEED_IMAGES.map((image) => image.code)).size, SEED_IMAGES.length);
+    GAME_CONFIGS.image.itemsPerLevel.forEach((itemCount, index) => {
+        const images = imagesOfLevel(index + 1);
+        assert.ok(images.length >= itemCount, `level ${index + 1}`);
+        // Hai ô trong cùng một ván không được là cùng một ảnh
+        assert.equal(new Set(images.map((image) => image.imageUrl)).size, images.length, `level ${index + 1}`);
+    });
+});
+
+test("image rounds draw unique images of their level and recall offers the same images shuffled", () => {
+    const levelCodes = imagesOfLevel(3).map((image) => image.code);
+    const items = imageEngine.generateItems(10, 3);
     assert.equal(new Set(items).size, 10);
+    assert.ok(items.every((code) => levelCodes.includes(code)));
+    assert.equal(imageEngine.generateItems(levelCodes.length, 3).length, levelCodes.length);
+    for (const count of [0, levelCodes.length + 1, 2.5]) {
+        assert.throws(() => imageEngine.generateItems(count, 3), RangeError);
+    }
+    // Game hình không có ván tự chọn số lượng, cũng không có level ngoài kho ảnh
+    assert.throws(() => imageEngine.generateItems(6, null), RangeError);
+    assert.throws(() => imageEngine.generateItems(6, 11), RangeError);
 
     const options = imageEngine.buildRecallOptions(items);
     assert.deepEqual([...options].sort(), [...items].sort());
+});
 
-    const view = imageEngine.toView(items[0]);
-    assert.equal(view.code, items[0]);
-    assert.ok(view.imageUrl?.includes(items[0]));
-    assert.throws(() => imageEngine.generateItems(0), RangeError);
+test("image codes resolve to their image, including codes saved by older rounds", () => {
+    const [first] = SEED_IMAGES;
+    assert.deepEqual(imageEngine.toView(first.code), { code: first.code, imageUrl: first.imageUrl });
+    // Kho 24 ảnh trước đây lưu id ảnh Unsplash làm mã
+    const unsplashCode = "photo-1543466835-00a7907e9de1";
+    assert.ok(imageEngine.toView(unsplashCode).imageUrl?.startsWith(`https://images.unsplash.com/${unsplashCode}?`));
+    // Trước nữa là mã ngẫu nhiên hiển thị qua picsum
+    assert.ok(imageEngine.toView("a1b2c3d4e5f6").imageUrl?.includes("picsum.photos/seed/memio-a1b2c3d4e5f6"));
 });
 
 test("answers keep empty slots as null", () => {

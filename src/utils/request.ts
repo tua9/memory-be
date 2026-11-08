@@ -1,6 +1,16 @@
+import { randomBytes } from "node:crypto";
 import type { Request } from "express";
 import { StatusCodes } from "http-status-codes";
 import ApiError from "./ApiError.js";
+import { GUEST_COOKIE } from "./cookies.js";
+
+// Người chơi của một request: tài khoản đã đăng nhập, hoặc khách nhận diện bằng cookie guestId
+export type PlayerRef = { userId: string } | { guestId: string };
+
+// 24 byte ngẫu nhiên mã hoá base64url: đủ khó đoán để không chiếm được ván của khách khác
+const GUEST_ID_PATTERN = /^[A-Za-z0-9_-]{32}$/;
+
+export const createGuestId = (): string => randomBytes(24).toString("base64url");
 
 // Id của người dùng đã qua middleware xác thực
 export const requireUserId = (request: Request): string => {
@@ -8,6 +18,15 @@ export const requireUserId = (request: Request): string => {
         throw new ApiError(StatusCodes.UNAUTHORIZED, "Unauthorized");
     }
     return request.user._id.toString();
+};
+
+// null: khách chưa từng chơi (chưa có cookie hợp lệ)
+export const readPlayer = (request: Request): PlayerRef | null => {
+    if (request.user) {
+        return { userId: request.user._id.toString() };
+    }
+    const guestId: unknown = request.cookies?.[GUEST_COOKIE];
+    return typeof guestId === "string" && GUEST_ID_PATTERN.test(guestId) ? { guestId } : null;
 };
 
 export const routeParam = (request: Request, name: string): string => {

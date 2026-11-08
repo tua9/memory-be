@@ -51,3 +51,7 @@ export const PHASE_GRACE_SEC = 30;
 
 // Ván bỏ dở (chưa nộp bài) được MongoDB tự xoá sau khoảng thời gian này
 export const UNFINISHED_ROUND_TTL_SEC = 24 * 60 * 60;
+
+// Khách (chưa đăng nhập) chỉ được giữ tạm level đã mở và các ván đã chơi: tính từ ván gần nhất,
+// quá khoảng này mà không chơi tiếp thì cookie khách hết hạn và MongoDB tự xoá dữ liệu
+export const GUEST_PROGRESS_TTL_SEC = 24 * 60 * 60;

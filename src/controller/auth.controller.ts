@@ -1,16 +1,9 @@
-import type { CookieOptions, RequestHandler, Response } from "express";
+import type { RequestHandler, Response } from "express";
 import { StatusCodes } from "http-status-codes";
-import { env } from "../config/env";
 import { asyncHandler } from "../middlewares/asyncHandler";
 import { authService, type AuthTokens } from "../services/user.service";
 import ApiError from "../utils/ApiError";
-
-const baseCookieOptions: CookieOptions = {
-    httpOnly: true,
-    secure: env.IS_PRODUCTION,
-    sameSite: "lax",
-    path: "/",
-};
+import { baseCookieOptions } from "../utils/cookies";
 
 // Không chọn "Duy trì đăng nhập" thì bỏ expires: cookie thành session cookie,
 // trình duyệt xóa khi đóng. Hạn thật của token vẫn do JWT và Session kiểm soát.
