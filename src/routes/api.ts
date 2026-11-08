@@ -8,6 +8,7 @@ import gameCatalogRoute from "./gameCatalogRoute.js";
 import dailyChallengeRoute from "./dailyChallengeRoute.js";
 import numberSessionRoute from "./numberSessionRoute.js";
 import faceNameRoute from "./faceNameRoute.js";
+import wordsSessionRoute from "./wordsSessionRoute.js";
 
 const router = express.Router();
 
@@ -28,5 +29,8 @@ router.use("/facename", faceNameRoute);
 
 router.use("/v1/numbers", numberSessionRoute);
 router.use("/numbers", numberSessionRoute);
+
+router.use("/v1/words", wordsSessionRoute);
+router.use("/words", wordsSessionRoute);
 
 export default router;
