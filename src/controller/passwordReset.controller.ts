@@ -9,8 +9,17 @@ import ApiError from "../utils/ApiError.js";
 
 export const createPasswordResetController = (
     service: PasswordResetService = passwordResetService,
-): Record<"requestLink" | "validateToken" | "confirm", RequestHandler> => ({
-    // Email đích luôn lấy từ tài khoản đã xác thực, bỏ qua mọi thứ client gửi trong body
+): Record<"requestLink" | "forgotPassword" | "validateToken" | "confirm", RequestHandler> => ({
+    // Quên mật khẩu: công khai, người dùng gửi email để nhận link reset
+    forgotPassword: asyncHandler(async (request, response) => {
+        const result = await service.forgotPassword(request.body?.email);
+        response.status(StatusCodes.OK).json({
+            status: "success",
+            message: result.message,
+        });
+    }),
+
+    // Giữ để tương thích nếu còn request cũ
     requestLink: asyncHandler(async (request, response) => {
         const user = request.user;
         if (!user) throw new ApiError(StatusCodes.UNAUTHORIZED, "Unauthorized");

@@ -7,6 +7,8 @@ import User, { type UserDocument } from "../models/user";
 import Session from "../models/sessions";
 import { JwtProvider } from "../providers/JwtProvider";
 import ApiError from "../utils/ApiError";
+import { assertValidNewPassword } from "../utils/password";
+import { PASSWORD_RESET_ERROR_CODES } from "../config/passwordReset";
 
 interface CredentialsBody {
     email?: unknown;
@@ -275,4 +277,61 @@ const signOut = async (token?: unknown): Promise<void> => {
     }
 };
 
-export const authService = { signUp, signIn, signOut, refreshToken };
+const changePassword = async (
+    userId: string,
+    body: unknown,
+): Promise<void> => {
+    const raw = typeof body === "object" && body !== null ? (body as Record<string, unknown>) : {};
+    const currentPassword = raw.currentPassword;
+    const newPassword = raw.newPassword;
+    const confirmPassword = raw.confirmPassword;
+
+    if (typeof currentPassword !== "string" || !currentPassword) {
+        throw new ApiError(
+            StatusCodes.BAD_REQUEST,
+            "Vui lòng nhập mật khẩu hiện tại",
+            [{ field: "currentPassword" }],
+            PASSWORD_RESET_ERROR_CODES.CURRENT_PASSWORD_REQUIRED,
+        );
+    }
+
+    const validatedNewPassword = assertValidNewPassword(newPassword, confirmPassword);
+
+    const user = await User.findById(userId);
+    if (!user) {
+        throw new ApiError(StatusCodes.NOT_FOUND, "User not found");
+    }
+    if (user.status !== "active") {
+        throw new ApiError(StatusCodes.FORBIDDEN, "Account is not active");
+    }
+
+    if (user.passwordHash) {
+        const isCurrentValid = await bcrypt.compare(currentPassword, user.passwordHash);
+        if (!isCurrentValid) {
+            throw new ApiError(
+                StatusCodes.BAD_REQUEST,
+                "Mật khẩu hiện tại không chính xác",
+                [{ field: "currentPassword" }],
+                PASSWORD_RESET_ERROR_CODES.INCORRECT_CURRENT_PASSWORD,
+            );
+        }
+
+        const isSamePassword = await bcrypt.compare(validatedNewPassword, user.passwordHash);
+        if (isSamePassword) {
+            throw new ApiError(
+                StatusCodes.BAD_REQUEST,
+                "Mật khẩu mới không được trùng với mật khẩu hiện tại.",
+                [{ field: "newPassword" }],
+                PASSWORD_RESET_ERROR_CODES.SAME_PASSWORD,
+            );
+        }
+    }
+
+    user.passwordHash = await bcrypt.hash(validatedNewPassword, 10);
+    await user.save();
+
+    // Thu hồi toàn bộ refresh session
+    await Session.deleteMany({ userId: user._id });
+};
+
+export const authService = { signUp, signIn, signOut, refreshToken, changePassword };

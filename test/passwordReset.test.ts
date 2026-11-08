@@ -46,7 +46,8 @@ const makeHarness = async (options: { sendError?: () => Error | null } = {}) => 
     const sent: MailMessage[] = [];
 
     const repository: PasswordResetRepository = {
-        findAccount: async (id) => (id === USER_ID ? { id, email: EMAIL, status: state.status } : null),
+        findAccount: async (id) => (id === USER_ID ? { id, email: EMAIL, status: state.status, passwordHash: state.passwordHash } : null),
+        findAccountByEmail: async (email) => (email === EMAIL ? { id: USER_ID, email, status: state.status, passwordHash: state.passwordHash } : null),
         getSendLimit: async () => (state.limit ? { ...state.limit } : null),
         reserveSend: async (_id, expected, next) => {
             const current = state.limit;
@@ -385,6 +386,7 @@ test("HTTP: sending a link requires sign-in; validate/confirm are public", async
     const calls: string[] = [];
     const fake: PasswordResetService = {
         requestLink: async () => { calls.push("request"); return { maskedEmail: "x", expiresInMinutes: 15, resendAfterSeconds: 60 }; },
+        forgotPassword: async () => { calls.push("forgot"); return { message: "ok" }; },
         validateToken: async () => { calls.push("validate"); return { maskedEmail: "x" }; },
         confirm: async () => { calls.push("confirm"); },
     };
@@ -405,6 +407,7 @@ test("HTTP: the target email comes from the authenticated user, never from the r
     const received: { id: string; email: string }[] = [];
     const fake: PasswordResetService = {
         requestLink: async (user) => { received.push(user); return { maskedEmail: "l***r@example.com", expiresInMinutes: 15, resendAfterSeconds: 60 }; },
+        forgotPassword: async () => ({ message: "ok" }),
         validateToken: async () => ({ maskedEmail: "x" }),
         confirm: async () => undefined,
     };
@@ -444,6 +447,50 @@ test("HTTP: rate-limit and invalid-token errors keep their codes", async () => {
         const invalid = await post(`${server.baseUrl}/validate`, { token: "a".repeat(43) });
         assert.equal(invalid.status, 400);
         assert.equal(((await invalid.json()) as { code: string }).code, "INVALID_RESET_TOKEN");
+    } finally {
+        await server.close();
+    }
+});
+
+test("forgotPassword: returns generic message for non-existent email without sending email", async () => {
+    const harness = await makeHarness();
+    const result = await harness.service.forgotPassword("nonexistent@example.com");
+    assert.equal(result.message, "Nếu email tồn tại trong hệ thống, hướng dẫn đặt lại mật khẩu đã được gửi tới hộp thư của bạn.");
+    assert.equal(harness.sent.length, 0);
+});
+
+test("forgotPassword: sends reset link for existing email", async () => {
+    const harness = await makeHarness();
+    const result = await harness.service.forgotPassword(EMAIL);
+    assert.equal(result.message, "Nếu email tồn tại trong hệ thống, hướng dẫn đặt lại mật khẩu đã được gửi tới hộp thư của bạn.");
+    assert.equal(harness.sent.length, 1);
+    assert.equal(harness.sent[0]!.to, EMAIL);
+    assert.match(harness.sent[0]!.text, new RegExp(`${CLIENT_URL}/reset-password#token=[A-Za-z0-9_-]{43}`));
+});
+
+test("confirm rejects when new password matches current password", async () => {
+    const harness = await makeHarness();
+    await harness.service.requestLink({ id: USER_ID, email: EMAIL });
+    const token = harness.lastToken();
+
+    await assert.rejects(
+        () => harness.service.confirm({ token, newPassword: "old-password-1", confirmPassword: "old-password-1" }),
+        (error: unknown) =>
+            error instanceof ApiError &&
+            error.statusCode === 400 &&
+            error.code === "SAME_PASSWORD",
+    );
+});
+
+test("HTTP: /forgot is public and returns generic success", async () => {
+    const harness = await makeHarness();
+    const server = await startRouterServer(undefined, harness.service);
+    try {
+        const response = await post(`${server.baseUrl}/forgot`, { email: "anyone@example.com" });
+        assert.equal(response.status, 200);
+        const body = await response.json() as { status: string; message: string };
+        assert.equal(body.status, "success");
+        assert.equal(body.message, "Nếu email tồn tại trong hệ thống, hướng dẫn đặt lại mật khẩu đã được gửi tới hộp thư của bạn.");
     } finally {
         await server.close();
     }

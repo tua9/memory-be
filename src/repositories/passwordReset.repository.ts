@@ -17,6 +17,7 @@ export interface ResetAccount {
     id: string;
     email: string;
     status: string;
+    passwordHash?: string | null;
 }
 
 export interface TokenRef {
@@ -26,6 +27,7 @@ export interface TokenRef {
 
 export interface PasswordResetRepository {
     findAccount(userId: string): Promise<ResetAccount | null>;
+    findAccountByEmail(email: string): Promise<ResetAccount | null>;
     getSendLimit(userId: string): Promise<SendLimitState | null>;
     // So sánh-và-đặt: chỉ ghi khi trạng thái hiện tại vẫn đúng như `expected`; false nếu request khác đã chen vào
     reserveSend(userId: string, expected: SendLimitState | null, next: SendLimitState): Promise<boolean>;
@@ -55,8 +57,13 @@ const isDuplicateKey = (error: unknown): boolean => (error as { code?: number })
 
 export const mongoPasswordResetRepository: PasswordResetRepository = {
     findAccount: async (userId) => {
-        const user = await User.findById(userId).select("email status").lean();
-        return user ? { id: user._id.toString(), email: user.email, status: user.status } : null;
+        const user = await User.findById(userId).select("email status passwordHash").lean();
+        return user ? { id: user._id.toString(), email: user.email, status: user.status, passwordHash: user.passwordHash } : null;
+    },
+
+    findAccountByEmail: async (email) => {
+        const user = await User.findOne({ email }).select("email status passwordHash").lean();
+        return user ? { id: user._id.toString(), email: user.email, status: user.status, passwordHash: user.passwordHash } : null;
     },
 
     getSendLimit: async (userId) => {

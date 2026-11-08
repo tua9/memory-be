@@ -28,6 +28,7 @@ export interface RequestLinkResult {
 
 export interface PasswordResetService {
     requestLink(user: { id: string; email: string }): Promise<RequestLinkResult>;
+    forgotPassword(rawEmail: unknown): Promise<{ message: string }>;
     validateToken(body: unknown): Promise<{ maskedEmail: string }>;
     confirm(body: unknown): Promise<void>;
 }
@@ -134,6 +135,57 @@ export const createPasswordResetService = ({
         };
     },
 
+    forgotPassword: async (rawEmail: unknown) => {
+        const GENERIC_SENT_MESSAGE = "Nếu email tồn tại trong hệ thống, hướng dẫn đặt lại mật khẩu đã được gửi tới hộp thư của bạn.";
+        if (typeof rawEmail !== "string" || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(rawEmail.trim())) {
+            throw new ApiError(
+                StatusCodes.BAD_REQUEST,
+                "A valid email is required",
+                [{ field: "email" }],
+            );
+        }
+        const email = rawEmail.trim().toLowerCase();
+        const account = await repository.findAccountByEmail(email);
+
+        // Nếu email không tồn tại hoặc tài khoản không active: trả về thông báo trung tính, không tiết lộ tài khoản
+        if (!account || account.status !== "active") {
+            return { message: GENERIC_SENT_MESSAGE };
+        }
+
+        const now = clock();
+        const previous = await repository.getSendLimit(account.id);
+        const next = nextLimitState(previous, now);
+
+        if (!(await repository.reserveSend(account.id, previous, next))) {
+            throw rateLimited(PASSWORD_RESET_RESEND_COOLDOWN_MS);
+        }
+
+        const token = randomBytes(32).toString("base64url");
+        let created: Awaited<ReturnType<PasswordResetRepository["createToken"]>> | null = null;
+        try {
+            created = await repository.createToken({
+                userId: account.id,
+                tokenHash: hashToken(token),
+                expiresAt: new Date(now.getTime() + PASSWORD_RESET_TOKEN_TTL_MS),
+            });
+            const link = `${clientUrl.replace(/\/+$/, "")}/reset-password#token=${token}`;
+            await mailer.send({
+                to: account.email,
+                ...buildPasswordResetEmail({
+                    link,
+                    expiresInMinutes: PASSWORD_RESET_TOKEN_TTL_MS / 60_000,
+                }),
+            });
+        } catch (error) {
+            if (created) await repository.deleteToken(created.id).catch(() => undefined);
+            await repository.restoreSendLimit(account.id, previous).catch(() => undefined);
+            throw error;
+        }
+
+        await repository.deleteTokensExcept(account.id, created.id);
+        return { message: GENERIC_SENT_MESSAGE };
+    },
+
     // Chỉ đọc: không tiêu thụ token, để trình quét link của dịch vụ email không làm link mất hiệu lực
     validateToken: async (body) => {
         const token = readToken(body);
@@ -158,6 +210,16 @@ export const createPasswordResetService = ({
 
         const account = await repository.findAccount(claimed.userId);
         if (!account || account.status !== "active") throw invalidToken();
+
+        if (account.passwordHash && (await bcrypt.compare(password, account.passwordHash))) {
+            await repository.releaseToken(claimed.id).catch(() => undefined);
+            throw new ApiError(
+                StatusCodes.BAD_REQUEST,
+                "Mật khẩu mới không được trùng với mật khẩu hiện tại.",
+                [{ field: "newPassword" }],
+                PASSWORD_RESET_ERROR_CODES.SAME_PASSWORD,
+            );
+        }
 
         try {
             if (!(await repository.updatePasswordHash(claimed.userId, passwordHash))) throw invalidToken();

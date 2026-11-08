@@ -14,7 +14,9 @@ export const createPasswordResetRouter = (
     const router = express.Router();
     const controller = createPasswordResetController(service);
 
-    // Cần đăng nhập: gửi link tới email của chính người đang đăng nhập
+    // Quên mật khẩu: công khai, người dùng gửi email để nhận link đặt lại
+    router.post("/forgot", controller.forgotPassword);
+    // Cần đăng nhập: gửi link tới email của chính người đang đăng nhập (giữ tương thích)
     router.post("/request", authentication, controller.requestLink);
     // Công khai: người mở link có thể chưa đăng nhập; quyền do token trong email quyết định
     router.post("/validate", controller.validateToken);
