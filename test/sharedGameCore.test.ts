@@ -8,6 +8,7 @@ import GameSession from "../src/models/gameSession.js";
 import NumberSession, { type NumberSessionDocument } from "../src/models/numberSession.js";
 import User from "../src/models/user.js";
 import UserGameProgress from "../src/models/userGameProgress.js";
+import GuestProgress from "../src/models/guestProgress.js";
 import { numberSessionRepository } from "../src/repositories/numberSession.repository.js";
 import { resolveRoundRules } from "../src/services/gameRules.service.js";
 import { gameSessionService, toCompletedView, type GameSessionRecord } from "../src/services/gameSession.service.js";
@@ -102,12 +103,13 @@ const memoryModels = () => {
     mock.method(User, "findById", () => query({ progress: userProgress }));
     mock.method(User, "updateOne", (_filter: any, update: any) => { awards++; userProgress = update.$set.progress; return query({ modifiedCount: 1 }); });
     mock.method(GameSession, "create", async (data: any) => {
-        const session = { ...data, _id: new Types.ObjectId(), completedAt: null, recallStartedAt: null, guestId: null };
+        const session = { rewards: null, guestUnlockedLevel: null, ...data, _id: new Types.ObjectId(), completedAt: null, recallStartedAt: null, guestId: data.guestId ?? null, userId: data.userId ?? null };
         sessions.set(String(session._id), session); return session;
     });
     mock.method(GameSession, "findOne", (filter: any) => {
         const found = sessions.get(String(filter._id));
-        return query(found && String(found.userId) === String(filter.userId) ? { ...found } : null);
+        const owns = found && (filter.guestId ? found.guestId === filter.guestId : String(found.userId) === String(filter.userId));
+        return query(owns ? { ...found } : null);
     });
     mock.method(GameSession, "findOneAndUpdate", (filter: any, update: any) => {
         const found = sessions.get(String(filter._id));
@@ -162,4 +164,30 @@ test("Numbers completion retries share the original id and award EXP only once",
     assert.equal(memory.progress.stats.played, 1);
     assert.equal(memory.progress.unlockedLevel, 2);
     assert.equal(numberSettlementSnapshot({ ...source, mode: "challenge", level: null } as NumberSessionDocument).rules.mode, "daily");
+});
+
+test("guest Numbers are cookie-owned, unlock guest progress and never award account EXP", async () => {
+    const memory = memoryModels();
+    let guestWrites = 0;
+    mock.method(GuestProgress, "findOne", () => query(null));
+    mock.method(GuestProgress, "updateOne", (filter: any, update: any) => {
+        assert.equal(filter.guestId, "g".repeat(32));
+        assert.equal(filter.gameName, "number");
+        assert.equal(update.$max.unlockedLevel, 2);
+        guestWrites++;
+        return query({ modifiedCount: 1 });
+    });
+    const guest = { guestId: "g".repeat(32) };
+    const started = await gameSessionService.startRound(guest, { gameName: "number", gameLevel: 1 });
+    await assert.rejects(gameSessionService.startRecall({ guestId: "x".repeat(32) }, started.sessionId), (error: any) => error.statusCode === 404);
+    await assert.rejects(gameSessionService.startRecall({ userId: USER }, started.sessionId), (error: any) => error.statusCode === 404);
+    await gameSessionService.startRecall(guest, started.sessionId);
+    const answers = started.items.map((item) => item.code);
+    const result = await gameSessionService.submitRound(guest, started.sessionId, { answers });
+    assert.equal(result.rewards, null);
+    assert.equal(result.result.result, "perfect");
+    assert.equal(result.unlockedLevel.after, 2);
+    await gameSessionService.submitRound(guest, started.sessionId, { answers: [] });
+    assert.equal(guestWrites, 1);
+    assert.equal(memory.awards, 0);
 });
