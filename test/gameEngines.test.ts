@@ -12,6 +12,9 @@ const isBadRequest = (error: unknown) => error instanceof ApiError && error.stat
 test("every configured game has an engine", () => {
     assert.equal(getGameEngine("card"), cardEngine);
     assert.equal(getGameEngine("image"), imageEngine);
+    assert.ok(getGameEngine("word"));
+    assert.ok(getGameEngine("number"));
+    assert.ok(getGameEngine("facename"));
 });
 
 test("the card deck has 52 unique codes", () => {
@@ -91,4 +94,19 @@ test("answers with the wrong shape or invalid options are rejected", () => {
 
 test("an option cannot be used in more than one slot", () => {
     assert.throws(() => parseAnswers(cardEngine, ["AS", "2H", "3D"], ["AS", "AS", null]), isBadRequest);
+});
+
+test("word engine generates unique words and compares with NFC normalization", () => {
+    const wordEngine = getGameEngine("word");
+    const items = wordEngine.generateItems(10, 1);
+    assert.equal(items.length, 10);
+    assert.equal(new Set(items).size, 10);
+    assert.equal(wordEngine.matches?.("Mặt trời", "mặt trời"), true);
+    assert.equal(wordEngine.matches?.("Mặt trời", "  MẶT TRỜI  "), true);
+    assert.equal(wordEngine.matches?.("Mặt trời", "mặt trăng"), false);
+    assert.equal(wordEngine.matches?.("Mặt trời", null), false);
+    assert.deepEqual(
+        wordEngine.parseAnswers?.(items, [items[0], null, ...Array(8).fill(null)]),
+        [items[0], null, ...Array(8).fill(null)],
+    );
 });
