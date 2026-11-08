@@ -14,6 +14,8 @@ export const createUserProfileRouter = (
     router.use(authentication);
     router.get("/", controller.getProfile);
     router.patch("/", controller.updateProfile);
+    router.put("/preferences", controller.savePreferences);
+    router.post("/preferences/skip", controller.skipPreferences);
 
     return router;
 };

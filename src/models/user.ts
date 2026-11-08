@@ -1,4 +1,5 @@
 import mongoose, { type Document } from "mongoose";
+import { DAILY_MINUTES_OPTIONS, TRAINING_GOALS, type DailyMinutes, type TrainingGoal } from "../config/preferences.js";
 import type { StreakState } from "../services/streak.service.js";
 
 export type UserStatus = "active" | "inactive" | "banned";
@@ -13,6 +14,16 @@ export interface UserProgress extends StreakState {
     totalPlayTimeSec: number;
 }
 
+// Mục tiêu luyện tập do người dùng tự khai; chưa trả lời lẫn chưa bỏ qua thì giao diện hỏi một lần
+export interface UserPreferences {
+    goals: TrainingGoal[];
+    dailyMinutes: DailyMinutes | null;
+    // "YYYY-MM-DD", chỉ có khi mục tiêu gồm "exam"
+    targetDate: string | null;
+    answeredAt: Date | null;
+    skippedAt: Date | null;
+}
+
 export interface UserDocument extends Document {
     username: string;
     email: string;
@@ -24,6 +35,7 @@ export interface UserDocument extends Document {
     status: UserStatus;
     role: UserRole;
     progress: UserProgress;
+    preferences?: UserPreferences;
 }
 
 const counter = () => ({ type: Number, default: 0, min: 0 });
@@ -37,6 +49,17 @@ const userProgressSchema = new mongoose.Schema<UserProgress>(
         lastPlayedDate: { type: String, default: null },
         totalGames: counter(),
         totalPlayTimeSec: counter(),
+    },
+    { _id: false },
+);
+
+const userPreferencesSchema = new mongoose.Schema<UserPreferences>(
+    {
+        goals: { type: [{ type: String, enum: TRAINING_GOALS }], default: [] },
+        dailyMinutes: { type: Number, enum: [...DAILY_MINUTES_OPTIONS, null], default: null },
+        targetDate: { type: String, default: null },
+        answeredAt: { type: Date, default: null },
+        skippedAt: { type: Date, default: null },
     },
     { _id: false },
 );
@@ -81,6 +104,7 @@ const userSchema = new mongoose.Schema<UserDocument>(
             default: "user",
         },
         progress: { type: userProgressSchema, default: () => ({}) },
+        preferences: { type: userPreferencesSchema, default: () => ({}) },
     },
     { timestamps: true },
 );

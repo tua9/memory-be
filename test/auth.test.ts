@@ -33,7 +33,7 @@ const startTestServer = async (router: express.Router) => {
     };
 };
 
-const makeProfileHarness = (repository: UserProfileRepository) => {
+const makeProfileHarness = (repository: Pick<UserProfileRepository, "updateUsername">) => {
     let currentUsername = "Original Name";
     const recordingRepository: UserProfileRepository = {
         updateUsername: async (userId, username) => {
@@ -41,6 +41,9 @@ const makeProfileHarness = (repository: UserProfileRepository) => {
             if (updatedUser) currentUsername = updatedUser.username;
             return updatedUser;
         },
+        // Mục tiêu luyện tập có test riêng (profilePreferences.test.ts)
+        savePreferences: async () => { throw new Error("not used in this test"); },
+        skipPreferences: async () => { throw new Error("not used in this test"); },
     };
     const service = createUserProfileService(recordingRepository);
     const authentication: RequestHandler = (request, _response, next) => {
@@ -108,6 +111,7 @@ test("profile reads expose only profile fields and updates persist the allowed u
             longestStreak: 0,
             streakExpired: false,
             playedToday: false,
+            preferences: { goals: [], dailyMinutes: null, targetDate: null, status: "unset" },
         });
         assert.deepEqual(initialBody.data.unavailableFields, ["fullname"]);
         assert.equal("email" in initialBody.data.profile, false);
