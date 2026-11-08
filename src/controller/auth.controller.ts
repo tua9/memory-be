@@ -73,3 +73,23 @@ export const signOut: RequestHandler = asyncHandler(async (request, response) =>
         message: "Sign out successful",
     });
 });
+
+export const googleAuth: RequestHandler = asyncHandler(async (request, response) => {
+    const token = request.body?.accessToken ?? request.body?.token;
+    const tokens = await authService.googleSignIn(token);
+    setAuthCookies(response, tokens);
+    response.status(StatusCodes.OK).json({
+        status: "success",
+        message: "Google sign in successful",
+        data: { userInfo: tokens.userInfo },
+    });
+});
+
+export const setPassword: RequestHandler = asyncHandler(async (request, response) => {
+    const userId = request.user!._id.toString();
+    await authService.setPassword(userId, request.body);
+    response.status(StatusCodes.OK).json({
+        status: "success",
+        message: "Password set successfully",
+    });
+});
