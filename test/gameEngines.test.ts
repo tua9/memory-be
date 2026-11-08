@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { GAME_CONFIGS } from "../src/config/games.js";
 import { SEED_IMAGES } from "../src/data/seedImages.js";
+import { SEED_WORDS_BY_LANG } from "../src/data/seedWords.js";
 import { CARD_CODES, cardEngine } from "../src/games/card.js";
 import { imageEngine } from "../src/games/image.js";
 import { getGameEngine, parseAnswers } from "../src/games/index.js";
@@ -109,4 +110,24 @@ test("word engine generates unique words and compares with NFC normalization", (
         wordEngine.parseAnswers?.(items, [items[0], null, ...Array(8).fill(null)]),
         [items[0], null, ...Array(8).fill(null)],
     );
+
+    const enItems = wordEngine.generateItems(10, 1, undefined, "en");
+    assert.equal(enItems.length, 10);
+    assert.equal(new Set(enItems).size, 10);
+    assert.ok(enItems.every((w) => typeof w === "string" && w.length > 0));
+
+    const frItems = wordEngine.generateItems(10, 1, undefined, "fr");
+    assert.equal(frItems.length, 10);
+    assert.equal(new Set(frItems).size, 10);
+});
+
+test("all languages have unique seed words and enough words for level 10", () => {
+    const issues: string[] = [];
+    for (const [lang, words] of Object.entries(SEED_WORDS_BY_LANG)) {
+        const norm = words.map((w) => w.trim().toLowerCase().normalize("NFC"));
+        const dupes = norm.filter((w, i) => norm.indexOf(w) !== i);
+        if (dupes.length > 0) issues.push(`${lang} dupes: ${dupes.join(", ")}`);
+        if (words.length < 50) issues.push(`${lang} has only ${words.length} words`);
+    }
+    assert.deepEqual(issues, []);
 });

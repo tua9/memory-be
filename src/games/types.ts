@@ -13,7 +13,7 @@ export interface GameEngine {
     gameName: ConfiguredGameName;
     // Generate the challenge items; the engine decides whether repeated items are meaningful (e.g. digits).
     // random: nguồn ngẫu nhiên có seed khi cần đề lặp lại được (thử thách ngày)
-    generateItems(count: number, level: number | null, random?: RandomInt): string[];
+    generateItems(count: number, level: number | null, random?: RandomInt, options?: unknown): string[];
     // Các lựa chọn ở phase nhớ lại; câu trả lời hợp lệ phải nằm trong danh sách này
     buildRecallOptions(items: readonly string[]): string[];
     toView(code: string): ItemView;

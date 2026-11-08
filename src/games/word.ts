@@ -27,7 +27,12 @@ export const generateWordItems = (
 
 export const wordEngine: GameEngine = {
     gameName: "word",
-    generateItems: (count, _level, random = randomInt) => generateWordItems(count, "vi", random),
+    generateItems: (count, _level, random = randomInt, options?: unknown) => {
+        const lang = (typeof options === "string" && options in SEED_WORDS_BY_LANG)
+            ? (options as SupportedLanguageCode)
+            : "vi";
+        return generateWordItems(count, lang, random);
+    },
     buildRecallOptions: (items) => [...items],
     toView: (code) => ({ code, label: code }),
     toRecallView: (code) => ({ code }),

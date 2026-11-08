@@ -92,6 +92,7 @@ test("sessions are grouped into weekly buckets per game and compared with the pr
         image: { played: 1, accuracy: 1 },
         number: { played: 0, accuracy: null },
         facename: { played: 0, accuracy: null },
+        word: { played: 0, accuracy: null },
     });
     assert.deepEqual(timeline.buckets[6].byGame.card, { played: 1, accuracy: 1 });
     assert.deepEqual(timeline.buckets[0].byGame.card, { played: 0, accuracy: null });

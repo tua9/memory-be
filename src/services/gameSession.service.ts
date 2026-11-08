@@ -115,6 +115,7 @@ const START_ROUND_FIELDS = [
   "itemCount",
   "memorizeSec",
   "recallSec",
+  "language",
 ] as const;
 const SUBMIT_ROUND_FIELDS = ["answers"] as const;
 
@@ -315,7 +316,7 @@ const startRound: GameSessionService["startRound"] = async (
   const { gameLevel, totalItems, memorizeLimitSec } = rules;
 
   const engine = getGameEngine(gameName);
-  const items = engine.generateItems(totalItems, gameLevel);
+  const items = engine.generateItems(totalItems, gameLevel, undefined, rules.language);
   const startedAt = new Date();
   const session = await GameSession.create({
     ...ownerOf(player),
