@@ -8,6 +8,8 @@ import NumberSession, {
 export interface CreateNumberSessionData {
     userId: string | mongoose.Types.ObjectId;
     mode: NumberGameMode;
+    level: number | null;
+    challengeDate: string | null;
     digitCount: number;
     memorizeSeconds: number;
     recallSeconds: number;
@@ -79,6 +81,10 @@ export interface NumberSessionRepository {
         options: HistoryQueryOptions,
     ): Promise<{ items: NumberSessionDocument[]; total: number }>;
     findExpiredCandidates(now: Date, limit: number): Promise<NumberSessionDocument[]>;
+    // Cấp cao nhất người chơi từng nhớ đúng hết; null khi chưa có ván hoàn hảo nào theo cấp
+    findHighestPerfectLevel(userId: string): Promise<number | null>;
+    // Ván thử thách của người chơi trong một ngày "YYYY-MM-DD"
+    findChallengeOn(userId: string, challengeDate: string): Promise<NumberSessionDocument | null>;
 }
 
 export class MongoNumberSessionRepository implements NumberSessionRepository {
@@ -276,6 +282,31 @@ export class MongoNumberSessionRepository implements NumberSessionRepository {
         })
             .limit(limit)
             .exec();
+    }
+
+    async findHighestPerfectLevel(userId: string): Promise<number | null> {
+        if (!mongoose.Types.ObjectId.isValid(userId)) {
+            return null;
+        }
+        const best = await NumberSession.findOne({
+            userId,
+            mode: "practice",
+            phase: "completed",
+            level: { $ne: null },
+            $expr: { $eq: ["$correctCount", "$digitCount"] },
+        })
+            .sort({ level: -1 })
+            .select("level")
+            .lean<{ level: number }>()
+            .exec();
+        return best?.level ?? null;
+    }
+
+    async findChallengeOn(userId: string, challengeDate: string): Promise<NumberSessionDocument | null> {
+        if (!mongoose.Types.ObjectId.isValid(userId)) {
+            return null;
+        }
+        return NumberSession.findOne({ userId, challengeDate }).exec();
     }
 }
 

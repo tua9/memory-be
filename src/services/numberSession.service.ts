@@ -1,4 +1,8 @@
 import { StatusCodes } from "http-status-codes";
+import { mongo } from "mongoose";
+import { NUMBER_LEVEL_DIGITS, NUMBER_MAX_LEVEL } from "../config/numbers.js";
+import { PROGRESS_TIME_ZONE } from "../config/progression.js";
+import { toDateKey } from "../utils/date.js";
 import type {
     NumberCompletionReason,
     NumberGameMode,
@@ -20,6 +24,7 @@ import {
 
 export interface CreateSessionInput {
     mode?: unknown;
+    level?: unknown;
     digitCount?: unknown;
     memorizeSeconds?: unknown;
     recallSeconds?: unknown;
@@ -49,6 +54,7 @@ export interface SessionResultData {
 export interface FormattedSessionResponse {
     id: string;
     mode: NumberGameMode;
+    level: number | null;
     digitCount: number;
     memorizeSeconds: number;
     recallSeconds: number;
@@ -71,6 +77,7 @@ export interface FormattedSessionResponse {
 export interface HistoryItemSummary {
     id: string;
     mode: NumberGameMode;
+    level: number | null;
     digitCount: number;
     memorizeSeconds: number;
     recallSeconds: number;
@@ -95,6 +102,25 @@ export interface HistoryResponse {
     };
 }
 
+export interface TodayChallengeStatus {
+    played: boolean;
+    phase?: NumberSessionPhase;
+    digitCount?: number;
+    score?: number;
+    correctCount?: number;
+    accuracy?: number;
+    memorizeUsedMs?: number | null;
+}
+
+export interface NumberProgressResponse {
+    unlockedLevel: number;
+    digitCounts: number[];
+    todayChallenge: TodayChallengeStatus;
+}
+
+const alreadyPlayedChallenge = () =>
+    new ApiError(StatusCodes.FORBIDDEN, "You have already played today's challenge", [], "CHALLENGE_PLAYED");
+
 const isRecord = (value: unknown): value is Record<string, unknown> =>
     typeof value === "object" && value !== null && !Array.isArray(value);
 
@@ -110,12 +136,14 @@ export const validateCreateSessionInput = (
     digitCount: number;
     memorizeSeconds: number;
     recallSeconds: number;
+    // Chỉ có khi chơi theo cấp: số chữ số lấy theo bảng cấp, không do client tự đặt
+    level?: number;
 } => {
     if (!isRecord(body)) {
         throw new ApiError(StatusCodes.BAD_REQUEST, "A JSON object is required");
     }
 
-    const { mode = "practice", digitCount, memorizeSeconds, recallSeconds } = body;
+    const { mode = "practice", level, digitCount, memorizeSeconds, recallSeconds } = body;
 
     if (mode !== "practice" && mode !== "challenge") {
         throw new ApiError(
@@ -126,6 +154,7 @@ export const validateCreateSessionInput = (
 
     if (mode === "challenge") {
         if (
+            level !== undefined ||
             digitCount !== undefined ||
             memorizeSeconds !== undefined ||
             recallSeconds !== undefined
@@ -145,6 +174,28 @@ export const validateCreateSessionInput = (
 
     // Practice mode
     let validDigitCount = 8;
+    let validLevel: number | undefined;
+    if (level !== undefined) {
+        if (digitCount !== undefined) {
+            throw new ApiError(
+                StatusCodes.BAD_REQUEST,
+                "Send either level or digitCount, not both",
+            );
+        }
+        if (
+            typeof level !== "number" ||
+            !Number.isInteger(level) ||
+            level < 1 ||
+            level > NUMBER_MAX_LEVEL
+        ) {
+            throw new ApiError(
+                StatusCodes.BAD_REQUEST,
+                `level must be an integer between 1 and ${NUMBER_MAX_LEVEL}`,
+            );
+        }
+        validLevel = level;
+        validDigitCount = NUMBER_LEVEL_DIGITS[level - 1];
+    }
     if (digitCount !== undefined) {
         if (
             typeof digitCount !== "number" ||
@@ -197,6 +248,7 @@ export const validateCreateSessionInput = (
         digitCount: validDigitCount,
         memorizeSeconds: validMemorizeSeconds,
         recallSeconds: validRecallSeconds,
+        ...(validLevel !== undefined ? { level: validLevel } : {}),
     };
 };
 
@@ -317,25 +369,82 @@ export class NumberSessionService {
         const input = validateCreateSessionInput(rawInput);
         const now = this.clock();
 
+        // Chơi theo cấp: chỉ được chọn cấp đã mở
+        if (input.level !== undefined && input.level > (await this.getUnlockedLevel(userId))) {
+            throw new ApiError(StatusCodes.FORBIDDEN, `Level ${input.level} is locked`, [], "LEVEL_LOCKED");
+        }
+
+        // Thử thách: mỗi tài khoản một lượt mỗi ngày (giờ Việt Nam)
+        const challengeDate = input.mode === "challenge" ? toDateKey(now, PROGRESS_TIME_ZONE) : null;
+        if (challengeDate && (await this.repository.findChallengeOn(userId, challengeDate))) {
+            throw alreadyPlayedChallenge();
+        }
+
         const originalDigits = generateRandomDigits(input.digitCount);
         const answers = new Array<null>(input.digitCount).fill(null);
         const memorizeEndsAt = new Date(now.getTime() + input.memorizeSeconds * 1000);
 
-        const newSession = await this.repository.create({
-            userId,
-            mode: input.mode,
-            digitCount: input.digitCount,
-            memorizeSeconds: input.memorizeSeconds,
-            recallSeconds: input.recallSeconds,
-            originalDigits,
-            answers,
-            phase: "memorizing",
-            revision: 0,
-            startedAt: now,
-            memorizeEndsAt,
-        });
+        try {
+            const newSession = await this.repository.create({
+                userId,
+                mode: input.mode,
+                level: input.level ?? null,
+                challengeDate,
+                digitCount: input.digitCount,
+                memorizeSeconds: input.memorizeSeconds,
+                recallSeconds: input.recallSeconds,
+                originalDigits,
+                answers,
+                phase: "memorizing",
+                revision: 0,
+                startedAt: now,
+                memorizeEndsAt,
+            });
+            return this.formatSessionResponse(newSession, now);
+        } catch (error) {
+            // Hai yêu cầu bắt đầu thử thách gửi cùng lúc: unique index chỉ cho một ván được tạo
+            if (challengeDate && error instanceof mongo.MongoServerError && error.code === 11000) {
+                throw alreadyPlayedChallenge();
+            }
+            throw error;
+        }
+    }
 
-        return this.formatSessionResponse(newSession, now);
+    /**
+     * Cấp cao nhất đang mở: cấp 1, hoặc cấp ngay sau cấp cao nhất từng nhớ đúng hết.
+     */
+    async getUnlockedLevel(userId: string): Promise<number> {
+        const best = await this.repository.findHighestPerfectLevel(userId);
+        return Math.min(NUMBER_MAX_LEVEL, (best ?? 0) + 1);
+    }
+
+    /**
+     * Tiến độ cho màn thiết lập: cấp đã mở, số chữ số mỗi cấp và lượt thử thách hôm nay.
+     */
+    async getProgress(userId: string): Promise<NumberProgressResponse> {
+        const now = this.clock();
+        const [unlockedLevel, todaySession] = await Promise.all([
+            this.getUnlockedLevel(userId),
+            this.repository.findChallengeOn(userId, toDateKey(now, PROGRESS_TIME_ZONE)),
+        ]);
+
+        let todayChallenge: TodayChallengeStatus = { played: false };
+        if (todaySession) {
+            // Ván thử thách bỏ dở quá hạn được chấm luôn, để trạng thái hôm nay đúng
+            const today = await this.syncDeadlines(todaySession, now);
+            todayChallenge = { played: true, phase: today.phase, digitCount: today.digitCount };
+            if (today.phase === "completed") {
+                todayChallenge = {
+                    ...todayChallenge,
+                    score: today.score ?? 0,
+                    correctCount: today.correctCount ?? 0,
+                    accuracy: today.accuracy ?? 0,
+                    memorizeUsedMs: today.memorizeUsedMs,
+                };
+            }
+        }
+
+        return { unlockedLevel, digitCounts: [...NUMBER_LEVEL_DIGITS], todayChallenge };
     }
 
     /**
@@ -694,6 +803,7 @@ export class NumberSessionService {
         const summaries: HistoryItemSummary[] = items.map((doc) => ({
             id: doc._id.toString(),
             mode: doc.mode,
+            level: doc.level ?? null,
             digitCount: doc.digitCount,
             memorizeSeconds: doc.memorizeSeconds,
             recallSeconds: doc.recallSeconds,
@@ -730,6 +840,7 @@ export class NumberSessionService {
     ): Promise<{
         id: string;
         mode: NumberGameMode;
+        level: number | null;
         digitCount: number;
         result: SessionResultData;
         comparison: ComparisonItem[];
@@ -759,6 +870,7 @@ export class NumberSessionService {
         return {
             id: session._id.toString(),
             mode: session.mode,
+            level: session.level ?? null,
             digitCount: session.digitCount,
             result: {
                 score: session.score ?? grading.score,
@@ -790,6 +902,7 @@ export class NumberSessionService {
         const base: FormattedSessionResponse = {
             id: session._id.toString(),
             mode: session.mode,
+            level: session.level ?? null,
             digitCount: session.digitCount,
             memorizeSeconds: session.memorizeSeconds,
             recallSeconds: session.recallSeconds,

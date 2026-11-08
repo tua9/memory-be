@@ -174,6 +174,28 @@ Chức năng "Ghi nhớ số ngẫu nhiên" (Numbers Memory) cho phép người 
 
 ---
 
+### 2.8. Tiến độ cấp và thử thách hôm nay
+
+- **Method / URL:** `GET /api/v1/numbers/progress` (cũng hỗ trợ `/api/numbers/progress`).
+- Yêu cầu đăng nhập, trả `Cache-Control: no-store`.
+- Response:
+  ```json
+  {
+    "status": "success",
+    "data": {
+      "unlockedLevel": 1,
+      "digitCounts": [8, 12, 18, 24, 30, 40, 50, 60, 70, 80],
+      "todayChallenge": { "played": false }
+    }
+  }
+  ```
+- Tạo ván theo cấp: `POST /sessions` với `{ "mode": "practice", "level": 1 }`. Server chọn số chữ số theo cấp; không gửi đồng thời `digitCount`. Vẫn hỗ trợ thời gian luyện tập tùy chọn và các ván tự chọn `digitCount` cũ.
+- `level` là số nguyên 1–10; cấp chưa mở trả `403`, code `LEVEL_LOCKED`. Session, lịch sử và kết quả trả thêm `level` (`null` cho ván tự chọn và thử thách).
+- Cấp 1 mở sẵn. Ván theo cấp hoàn thành với `correctCount === digitCount` mở cấp tiếp theo, tối đa cấp 10. Tiến độ được suy ra từ các kết quả đã lưu trong MongoDB, không phụ thuộc bộ nhớ trình duyệt hay tiến trình server. Ván tự chọn không mở cấp.
+- Thử thách giữ nguyên 80 chữ số và thời gian cố định. Mỗi tài khoản chỉ được bắt đầu một ván mỗi ngày theo `Asia/Ho_Chi_Minh`; lượt được tính ngay khi tạo ván, kể cả bỏ dở. Lượt thứ hai trả `403`, code `CHALLENGE_PLAYED`; unique index bảo vệ cả hai request đồng thời.
+- Khi đã bắt đầu, `todayChallenge` có `played: true`, `phase`, `digitCount`. Chỉ khi `phase: "completed"` mới có thêm `score`, `correctCount`, `accuracy`, `memorizeUsedMs`. API tự đồng bộ deadline và chấm ván thử thách quá hạn bằng đáp án đã lưu; không trả dãy số hay đáp án.
+- Khi triển khai cần bảo đảm các index của model `NumberSession` đã được tạo, đặc biệt unique partial index `{ userId: 1, challengeDate: 1 }`. Session cũ không có `level`/`challengeDate` vẫn đọc được nhưng không được quy đổi thành tiến độ cấp hay lượt thử thách mới.
+
 ## 3. Hướng dẫn tích hợp cho Frontend Engineer
 
 1. **Chuẩn bị đếm ngược (3–2–1):**

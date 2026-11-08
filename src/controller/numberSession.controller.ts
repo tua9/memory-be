@@ -39,7 +39,21 @@ export const createNumberSessionController = (
     submitSession: RequestHandler;
     getHistory: RequestHandler;
     getResult: RequestHandler;
+    getProgress: RequestHandler;
 } => ({
+    // GET /progress: cấp đã mở, số chữ số mỗi cấp và lượt thử thách hôm nay
+    getProgress: asyncHandler(async (request, response) => {
+        const userId = getUserIdFromRequest(request);
+        const progress = await service.getProgress(userId);
+
+        response.set("Cache-Control", "no-store");
+        response.status(StatusCodes.OK).json({
+            status: "success",
+            data: progress,
+        });
+    }),
+
+
     // POST /sessions
     createSession: asyncHandler(async (request, response) => {
         const userId = getUserIdFromRequest(request);

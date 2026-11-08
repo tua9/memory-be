@@ -19,6 +19,7 @@ export const createNumberSessionRouter = (
     router.use(authentication);
 
     // Static routes first
+    router.get("/progress", controller.getProgress);
     router.post("/sessions", controller.createSession);
     router.get("/sessions", controller.getHistory);
 
