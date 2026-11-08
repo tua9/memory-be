@@ -6,6 +6,7 @@ import gameHistoryRoute from "./gameHistoryRoute.js";
 import progressRoute from "./progressRoute.js";
 import gameCatalogRoute from "./gameCatalogRoute.js";
 import numberSessionRoute from "./numberSessionRoute.js";
+import faceNameRoute from "./faceNameRoute.js";
 
 const router = express.Router();
 
@@ -19,6 +20,9 @@ router.use("/game-sessions", gameSessionRoute);
 router.use("/game-sessions", gameHistoryRoute);
 router.use("/progress", progressRoute);
 router.use("/games", gameCatalogRoute);
+
+router.use("/game", faceNameRoute);
+router.use("/facename", faceNameRoute);
 
 router.use("/v1/numbers", numberSessionRoute);
 router.use("/numbers", numberSessionRoute);
