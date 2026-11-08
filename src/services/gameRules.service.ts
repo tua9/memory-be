@@ -24,6 +24,7 @@ export interface RoundRules {
     passAccuracy: number;
     requiredScore?: number;
     wrongAnswerPenalty?: number;
+    language?: string;
 }
 
 export interface RoundSetupInput {
@@ -32,6 +33,7 @@ export interface RoundSetupInput {
     itemCount?: unknown;
     memorizeSec?: unknown;
     recallSec?: unknown;
+    language?: unknown;
 }
 
 export interface GradedRound {
@@ -107,6 +109,7 @@ export const resolveRoundRules = (
         recallLimitSec: config.recallSec,
         passAccuracy: config.passAccuracy,
         ...(config.wrongAnswerPenalty !== undefined ? { wrongAnswerPenalty: config.wrongAnswerPenalty } : {}),
+        ...(typeof input.language === "string" ? { language: input.language } : {}),
     };
 
     if (mode === "custom") {

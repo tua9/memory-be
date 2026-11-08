@@ -55,6 +55,7 @@ const roundRulesSchema = new mongoose.Schema<StoredRoundRules>(
         passAccuracy: { type: Number, required: true, min: 0, max: 1 },
         requiredScore: { type: Number, min: 0 },
         wrongAnswerPenalty: { type: Number, min: 0 },
+        language: { type: String, default: null },
     },
     { _id: false },
 );

@@ -5,6 +5,7 @@ import { cardEngine } from "./card.js";
 import { imageEngine } from "./image.js";
 import { numberEngine } from "./number.js";
 import { faceNameEngine } from "./facename.js";
+import { wordEngine } from "./word.js";
 import type { GameEngine } from "./types.js";
 
 export type { GameEngine, ItemView } from "./types.js";
@@ -14,6 +15,7 @@ const GAME_ENGINES: Record<ConfiguredGameName, GameEngine> = {
     image: imageEngine,
     number: numberEngine,
     facename: faceNameEngine,
+    word: wordEngine,
 };
 
 export const getGameEngine = (gameName: ConfiguredGameName): GameEngine => GAME_ENGINES[gameName];

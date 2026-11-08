@@ -73,6 +73,17 @@ export const GAME_CONFIGS = {
         passAccuracy: 0.7,
         unlockOn: "pass",
     },
+    word: {
+        itemsPerLevel: [6, 10, 14, 18, 22, 26, 30, 35, 42, 50],
+        customItems: { min: 4, max: 50 },
+        memorizeSecOptions: [30, 60, 120, 300],
+        defaultMemorizeSec: 60,
+        recallSec: 240,
+        requiredScorePerLevel: [4, 7, 10, 12, 15, 18, 20, 24, 28, 34],
+        passAccuracy: 2 / 3,
+        unlockOn: "pass",
+        customTimeRange: { min: 10, max: 600 },
+    },
 } as const satisfies Record<string, GameConfig>;
 
 export type ConfiguredGameName = keyof typeof GAME_CONFIGS;

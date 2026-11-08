@@ -14,7 +14,7 @@ const VI_WORDS: readonly string[] = [
   "Dòng suối", "Chiếc xe", "Ngôi sao", "Vầng trăng", "Con cá", "Chú chim", "Chiếc mũ", "Quả bóng",
   "Chiếc gương", "Cái bàn", "Cái ghế", "Ba lô", "Chiếc dù", "Bức thư", "Chìa khóa", "Ngọn hải đăng",
   "Hòn đảo", "Cái cây", "Chiếc nơ", "Đôi đũa", "Cái bát", "Chiếc áo", "Quả chuối", "Củ cà rốt",
-  "Bánh mì", "Ngôi sao", "Chiếc gối", "Cái chăn", "Đôi dép", "Mắt kính", "Cây bút", "Vở kẻ",
+  "Bánh mì", "Cốc nước", "Chiếc gối", "Cái chăn", "Đôi dép", "Mắt kính", "Cây bút", "Vở kẻ",
   "Cục tẩy", "Cái kéo", "Thước kẻ", "Mảnh giấy", "Cửa sổ", "Cột cờ", "Quả địa cầu", "Xe đạp",
   "Máy bay", "Tàu hỏa", "Trái đất", "Sao hỏa", "Vương miện", "Viên kim cương", "Mặt dây chuyền",
   "Chuông gió", "Ống nhòm", "Kính hiển vi", "Cầu vồng", "Thác nước", "Bình hoa", "Chậu cây",
@@ -49,7 +49,7 @@ const EN_WORDS: readonly string[] = [
   "Cave", "Volcano", "Iceberg", "Snow", "Candle", "Fireplace", "Kettle", "Spoon",
   "Plate", "Fence", "Archway", "Bell", "Staircase", "Balcony", "Compass", "Anchor",
   "Helm", "Surfboard", "Skateboard", "Goggles", "Rod", "Net", "Cabin", "Tent",
-  "Chimney", "Lantern", "Fireworks", "Coin", "Envelope", "Mirror", "Tower", "Bridge"
+  "Chimney", "Lantern", "Fireworks", "Coin", "Envelope", "Teapot", "Tower", "Whistle"
 ];
 
 const FR_WORDS: readonly string[] = [
@@ -63,7 +63,7 @@ const FR_WORDS: readonly string[] = [
   "Couverture", "Lunettes", "Stylo", "Cahier", "Gomme", "Ciseaux", "Règle", "Papier",
   "Fenêtre", "Vélo", "Avion", "Train", "Terre", "Couronne", "Diamant", "Arc-en-ciel",
   "Cascade", "Vase", "Chiot", "Lapin", "Cheval", "Tigre", "Éléphant", "Manchot",
-  "Baleine", "Tortue", "Papillon", "Cerf-volant", "Ballon", "Éventail", "Statue", "Gâteau",
+  "Baleine", "Tortue", "Papillon", "Cerf-volant", "Bouteille", "Éventail", "Statue", "Gâteau",
   "Lait", "Mangue", "Pastèque", "Raisin", "Fraise", "Orange", "Rose", "Tournesol",
   "Drapeau", "Trophée", "Torche", "Sable", "Coquillage", "Corail", "Hamac", "Moulin",
   "Champ", "Lac", "Grotte", "Volcan", "Neige", "Bougie", "Cheminée", "Cuillère",
