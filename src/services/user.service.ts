@@ -293,6 +293,68 @@ interface GoogleProfile {
     picture?: string;
 }
 
+const GOOGLE_ID_TOKEN_ISSUERS = ["accounts.google.com", "https://accounts.google.com"];
+
+// Id token từ Google Sign-In trên mobile. Endpoint tokeninfo kiểm tra chữ ký và hạn;
+// backend còn phải chắc token được cấp cho app này (aud), nếu không token đăng nhập app khác cũng dùng được.
+// Trên mobile cấu hình webClientId = GOOGLE_CLIENT_ID để id token mang aud này.
+const fetchGoogleIdTokenProfile = async (idToken: string): Promise<GoogleProfile> => {
+    if (!env.GOOGLE_CLIENT_ID) {
+        throw new ApiError(
+            StatusCodes.INTERNAL_SERVER_ERROR,
+            "Google client ID must be configured",
+        );
+    }
+
+    let claims: Record<string, unknown>;
+    try {
+        const response = await fetch(
+            `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(idToken)}`,
+        );
+        if (!response.ok) {
+            throw new ApiError(
+                StatusCodes.UNAUTHORIZED,
+                "Google token is invalid or expired",
+            );
+        }
+        claims = (await response.json()) as Record<string, unknown>;
+    } catch (error) {
+        if (error instanceof ApiError) throw error;
+        throw new ApiError(
+            StatusCodes.UNAUTHORIZED,
+            "Failed to authenticate with Google",
+        );
+    }
+
+    if (
+        claims.aud !== env.GOOGLE_CLIENT_ID ||
+        !GOOGLE_ID_TOKEN_ISSUERS.includes(String(claims.iss)) ||
+        typeof claims.sub !== "string" ||
+        typeof claims.email !== "string"
+    ) {
+        throw new ApiError(
+            StatusCodes.UNAUTHORIZED,
+            "Google token was not issued for this app",
+        );
+    }
+
+    return {
+        sub: claims.sub,
+        email: claims.email,
+        // tokeninfo trả email_verified dạng chuỗi "true"
+        email_verified: claims.email_verified === true || claims.email_verified === "true",
+        name: typeof claims.name === "string" ? claims.name : undefined,
+        picture: typeof claims.picture === "string" ? claims.picture : undefined,
+    };
+};
+
+const googleSignInWithIdToken = async (idToken: unknown): Promise<AuthTokens> => {
+    if (typeof idToken !== "string" || !idToken.trim()) {
+        throw new ApiError(StatusCodes.BAD_REQUEST, "Google token is required");
+    }
+    return signInWithGoogleProfile(await fetchGoogleIdTokenProfile(idToken));
+};
+
 const googleSignIn = async (token: unknown): Promise<AuthTokens> => {
     if (typeof token !== "string" || !token.trim()) {
         throw new ApiError(StatusCodes.BAD_REQUEST, "Google token is required");
@@ -320,6 +382,11 @@ const googleSignIn = async (token: unknown): Promise<AuthTokens> => {
         );
     }
 
+    return signInWithGoogleProfile(profile);
+};
+
+// Tìm hoặc tạo tài khoản từ hồ sơ Google đã xác thực, rồi mở phiên đăng nhập
+const signInWithGoogleProfile = async (profile: GoogleProfile): Promise<AuthTokens> => {
     if (!profile.email_verified) {
         throw new ApiError(
             StatusCodes.UNAUTHORIZED,
@@ -444,5 +511,6 @@ export const authService = {
     signOut,
     refreshToken,
     googleSignIn,
+    googleSignInWithIdToken,
     changePassword,
 };

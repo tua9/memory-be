@@ -20,12 +20,19 @@ export const requireUserId = (request: Request): string => {
     return request.user._id.toString();
 };
 
-// null: khách chưa từng chơi (chưa có cookie hợp lệ)
+// App mobile gửi "X-Client: mobile": token và guestId đi trong body/header thay vì cookie
+export const isMobileClient = (request: Request): boolean =>
+    request.get("X-Client")?.toLowerCase() === "mobile";
+
+// App mobile gửi lại guestId đã nhận ở lần chơi đầu qua header này
+export const GUEST_HEADER = "X-Guest-Id";
+
+// null: khách chưa từng chơi (chưa có cookie hoặc header hợp lệ)
 export const readPlayer = (request: Request): PlayerRef | null => {
     if (request.user) {
         return { userId: request.user._id.toString() };
     }
-    const guestId: unknown = request.cookies?.[GUEST_COOKIE];
+    const guestId: unknown = request.cookies?.[GUEST_COOKIE] ?? request.get(GUEST_HEADER);
     return typeof guestId === "string" && GUEST_ID_PATTERN.test(guestId) ? { guestId } : null;
 };
 

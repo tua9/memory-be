@@ -9,6 +9,7 @@ import {
 import { setGuestCookie } from "../utils/cookies.js";
 import {
   createGuestId,
+  isMobileClient,
   readPlayer,
   routeParam,
   type PlayerRef,
@@ -30,10 +31,12 @@ export const createGameSessionController = (
   startRecall: RequestHandler;
   submitRound: RequestHandler;
 } => ({
-  // POST /api/game-sessions: khách lần đầu chơi được cấp cookie guestId, các lần sau được gia hạn
+  // POST /api/game-sessions: khách lần đầu chơi được cấp guestId, các lần sau được gia hạn.
+  // Web nhận guestId qua cookie httpOnly; app mobile nhận trong body rồi tự gửi lại qua header X-Guest-Id.
   startRound: asyncHandler(async (request, response) => {
     const player = readPlayer(request) ?? { guestId: createGuestId() };
-    if ("guestId" in player) {
+    const mobileGuestId = "guestId" in player && isMobileClient(request) ? player.guestId : null;
+    if ("guestId" in player && !mobileGuestId) {
       setGuestCookie(response, player.guestId);
     }
     const session = await service.startRound(player, request.body);
@@ -41,7 +44,7 @@ export const createGameSessionController = (
     response.status(StatusCodes.CREATED).json({
       status: "success",
       message: "Game round started",
-      data: { session },
+      data: { session, ...(mobileGuestId && { guestId: mobileGuestId }) },
     });
   }),
 
