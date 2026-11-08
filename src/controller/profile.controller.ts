@@ -13,7 +13,6 @@ export const createUserProfileController = (
         if (!user) {
             throw new ApiError(StatusCodes.UNAUTHORIZED, "Unauthorized");
         }
-
         response.status(StatusCodes.OK).json({
             status: "success",
             data: {
