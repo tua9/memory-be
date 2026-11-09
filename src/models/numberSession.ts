@@ -13,6 +13,12 @@ export interface NumberSessionDocument extends Document {
     _id: Types.ObjectId;
     userId: Types.ObjectId;
     mode: NumberGameMode;
+    // Cấp của ván luyện tập theo cấp; null với ván tự chọn số lượng và ván thử thách
+    level: number | null;
+    // Ngày "YYYY-MM-DD" (giờ Việt Nam) của ván thử thách; null với ván luyện tập
+    challengeDate: string | null;
+    sharedProgress?: boolean;
+    progressRecordedAt?: Date | null;
     digitCount: number;
     memorizeSeconds: number;
     recallSeconds: number;
@@ -49,6 +55,17 @@ const numberSessionSchema = new mongoose.Schema<NumberSessionDocument>(
             enum: NUMBER_GAME_MODES,
             required: true,
         },
+        level: {
+            type: Number,
+            default: null,
+            min: 1,
+        },
+        challengeDate: {
+            type: String,
+            default: null,
+        },
+        sharedProgress: { type: Boolean, default: false },
+        progressRecordedAt: { type: Date, default: null },
         digitCount: {
             type: Number,
             required: true,
@@ -155,6 +172,15 @@ const numberSessionSchema = new mongoose.Schema<NumberSessionDocument>(
 numberSessionSchema.index({ userId: 1, createdAt: -1, _id: -1 });
 numberSessionSchema.index({ userId: 1, mode: 1, createdAt: -1 });
 numberSessionSchema.index({ userId: 1, phase: 1, createdAt: -1 });
+
+// Cấp đã mở: tìm ván hoàn hảo ở cấp cao nhất của một người chơi
+numberSessionSchema.index({ userId: 1, level: -1, phase: 1 });
+numberSessionSchema.index({ sharedProgress: 1, phase: 1, progressRecordedAt: 1 });
+// Thử thách: mỗi tài khoản đúng một ván mỗi ngày, kể cả khi hai yêu cầu bắt đầu gửi cùng lúc
+numberSessionSchema.index(
+    { userId: 1, challengeDate: 1 },
+    { unique: true, partialFilterExpression: { challengeDate: { $type: "string" } } },
+);
 
 // Indexes for background timeout sweep
 numberSessionSchema.index({ phase: 1, recallEndsAt: 1 });

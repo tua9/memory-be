@@ -48,7 +48,8 @@ const testAuthMiddleware: RequestHandler = (request, _response, next) => {
 
 const repository = new MongoNumberSessionRepository();
 const testClock = () => new Date(mockTime.getTime());
-const service = new NumberSessionService(repository, testClock);
+// The Numbers-only integration suite isolates its lifecycle; shared rewards have their own integration suite.
+const service = new NumberSessionService(repository, testClock, async () => {});
 
 const startTestServer = async () => {
     const app = express();
@@ -75,10 +76,38 @@ const startTestServer = async () => {
 
 before(async () => {
     await connectTestDB();
+    await NumberSession.init();
     // Clean up test sessions created by test users
     await NumberSession.deleteMany({
         userId: { $in: [USER_A_ID, USER_B_ID] },
     }).exec();
+});
+
+test("Mongo progress persists perfect levels and enforces one concurrent daily challenge", async () => {
+    currentUser = USER_B_ID;
+    mockTime = new Date("2026-11-08T03:00:00Z");
+    try {
+        const round = await service.createSession(USER_B_ID, { level: 1 });
+        const recall = await service.startRecall(USER_B_ID, round.id);
+        await service.submitSession(USER_B_ID, round.id, { revision: recall.revision, answers: round.digits });
+        const restarted = new NumberSessionService(new MongoNumberSessionRepository(), testClock, async () => {});
+        assert.equal((await restarted.getProgress(USER_B_ID)).unlockedLevel, 2);
+        assert.equal((await restarted.createSession(USER_B_ID, { level: 2 })).digitCount, 12);
+
+        const starts = await Promise.allSettled([
+            restarted.createSession(USER_B_ID, { mode: "challenge" }),
+            restarted.createSession(USER_B_ID, { mode: "challenge" }),
+        ]);
+        assert.equal(starts.filter((result) => result.status === "fulfilled").length, 1);
+        assert.equal(await NumberSession.countDocuments({ userId: USER_B_ID, challengeDate: "2026-11-08" }), 1);
+        const rejected = starts.find((result) => result.status === "rejected") as PromiseRejectedResult;
+        assert.equal(rejected.reason.code, "CHALLENGE_PLAYED");
+        assert.equal((await restarted.getProgress(USER_B_ID)).todayChallenge.phase, "memorizing");
+        mockTime = new Date("2026-11-08T04:00:00Z");
+        assert.equal((await restarted.getProgress(USER_B_ID)).todayChallenge.phase, "completed");
+    } finally {
+        currentUser = USER_A_ID;
+    }
 });
 
 after(async () => {

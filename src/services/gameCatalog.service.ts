@@ -1,12 +1,15 @@
 import { CONFIGURED_GAME_NAMES, type ConfiguredGameName, type GameResult } from "../config/games.js";
 import GuestProgress, { type GuestProgressData } from "../models/guestProgress.js";
 import UserGameProgress, { type GameProgress } from "../models/userGameProgress.js";
+import { numberSessionRepository } from "../repositories/numberSession.repository.js";
 import type { PlayerRef } from "../utils/request.js";
 import { getGameConfig, getMaxLevel } from "./gameRules.service.js";
 
 export interface GameLevelView {
     level: number;
     itemCount: number;
+    recallSec?: number;
+    requiredScore?: number;
 }
 
 // Tiến độ của người chơi trong một game; khách chỉ có level đã mở (giữ tạm), không có kỷ lục
@@ -27,6 +30,8 @@ export interface GameCatalogItem {
     recallSec: number;
     passAccuracy: number;
     unlockOn: Exclude<GameResult, "fail">;
+    wrongAnswerPenalty?: number;
+    customTimeRange?: { min: number; max: number };
     // null với khách chưa chơi ván nào
     player: PlayerGameView | null;
 }
@@ -60,13 +65,18 @@ export const buildGameCatalog = (
         return {
             gameName,
             maxLevel: getMaxLevel(gameName),
-            levels: config.itemsPerLevel.map((itemCount, index) => ({ level: index + 1, itemCount })),
+            levels: config.itemsPerLevel.map((itemCount, index) => ({ level: index + 1, itemCount,
+                ...(config.recallSecPerLevel ? { recallSec: config.recallSecPerLevel[index] } : {}),
+                ...(config.requiredScorePerLevel ? { requiredScore: config.requiredScorePerLevel[index] } : {}),
+            })),
             customItems: config.customItems ? { ...config.customItems } : null,
             memorizeSecOptions: [...config.memorizeSecOptions],
             defaultMemorizeSec: config.defaultMemorizeSec,
             recallSec: config.recallSec,
             passAccuracy: config.passAccuracy,
             unlockOn: config.unlockOn,
+            ...(config.wrongAnswerPenalty !== undefined ? { wrongAnswerPenalty: config.wrongAnswerPenalty } : {}),
+            ...(config.customTimeRange ? { customTimeRange: config.customTimeRange } : {}),
             player: playerByGame ? toPlayerView(gameName, playerByGame[gameName]) : null,
         };
     });
@@ -80,7 +90,10 @@ const listGames: GameCatalogService["listGames"] = async (player) => {
             .select("gameName unlockedLevel records stats")
             .lean<(StoredGameProgress & { gameName: ConfiguredGameName })[]>()
             .exec();
-        return buildGameCatalog(Object.fromEntries(progress.map((item) => [item.gameName, fromStoredProgress(item)])));
+        const views = Object.fromEntries(progress.map((item) => [item.gameName, fromStoredProgress(item)]));
+        const legacyLevel = Math.min(getMaxLevel("number"), (await numberSessionRepository.findHighestPerfectLevel(player.userId) ?? 0) + 1);
+        views.number = { unlockedLevel: Math.max(legacyLevel, views.number?.unlockedLevel ?? 1), bestLevel: views.number?.bestLevel ?? null, played: views.number?.played ?? 0 };
+        return buildGameCatalog(views);
     }
     const progress = await GuestProgress.find({ guestId: player.guestId })
         .select("gameName unlockedLevel played")

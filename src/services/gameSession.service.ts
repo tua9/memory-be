@@ -22,9 +22,10 @@ import User, { type UserProgress } from "../models/user.js";
 import UserGameProgress, {
   type GameProgress,
 } from "../models/userGameProgress.js";
+import { numberSessionRepository } from "../repositories/numberSession.repository.js";
 import ApiError from "../utils/ApiError.js";
 import type { PlayerRef } from "../utils/request.js";
-import { parseGameName, resolveRoundRules } from "./gameRules.service.js";
+import { getMaxLevel, gradeRound, parseGameName, resolveRoundRules } from "./gameRules.service.js";
 import {
   compareAnswers,
   createInitialGameProgress,
@@ -42,6 +43,7 @@ export interface RoundView {
   gameName: ConfiguredGameName;
   status: GameSessionStatus;
   rules: StoredRoundRules;
+  serverNow?: Date;
 }
 
 export interface StartedRoundView extends RoundView {
@@ -61,6 +63,8 @@ export interface ItemResultView {
 }
 
 export interface RoundResultView {
+  score?: number;
+  maxScore?: number;
   correctItems: number;
   totalItems: number;
   accuracy: number;
@@ -110,6 +114,8 @@ const START_ROUND_FIELDS = [
   "gameLevel",
   "itemCount",
   "memorizeSec",
+  "recallSec",
+  "language",
 ] as const;
 const SUBMIT_ROUND_FIELDS = ["answers"] as const;
 
@@ -182,7 +188,9 @@ const findUnlockedLevel = async (
           .select("unlockedLevel")
           .lean<Pick<GuestProgressData, "unlockedLevel">>()
           .exec();
-  return progress?.unlockedLevel ?? 1;
+  const legacyLevel = gameName === "number" && "userId" in player
+    ? Math.min(getMaxLevel(gameName), (await numberSessionRepository.findHighestPerfectLevel(player.userId) ?? 0) + 1) : 1;
+  return Math.max(progress?.unlockedLevel ?? 1, legacyLevel);
 };
 
 const expireSession = async (
@@ -196,6 +204,7 @@ const expireSession = async (
 };
 
 export const toRoundView = (session: GameSessionRecord): RoundView => ({
+  serverNow: new Date(),
   sessionId: session._id.toString(),
   gameName: session.gameName,
   status: session.status,
@@ -240,7 +249,7 @@ const toRecallView = (
     ...toRoundView(session),
     recallOptions: engine
       .buildRecallOptions(session.items)
-      .map((code) => engine.toView(code)),
+      .map((code) => engine.toRecallView?.(code) ?? engine.toView(code)),
     recallDeadline: addSeconds(
       session.recallStartedAt,
       session.rules.recallLimitSec,
@@ -263,10 +272,12 @@ export const toCompletedView = (
   }
 
   const engine = getGameEngine(session.gameName);
-  const perItem = compareAnswers(session.items, session.answers ?? []).map(
+  const compared = compareAnswers(session.items, session.answers ?? [], engine.matches);
+  const graded = gradeRound(session.rules, correctItems, compared.filter((item) => !item.correct && item.answer !== null).length);
+  const perItem = compared.map(
     (item) => ({
       expected: engine.toView(item.expected),
-      answer: item.answer === null ? null : engine.toView(item.answer),
+      answer: item.answer === null ? null : engine.answerView?.(item.answer) ?? engine.toView(item.answer),
       correct: item.correct,
     }),
   );
@@ -276,6 +287,7 @@ export const toCompletedView = (
     startedAt: session.startedAt,
     completedAt,
     result: {
+      ...(graded.score !== undefined ? { score: graded.score, maxScore: graded.maxScore } : {}),
       correctItems,
       totalItems: session.rules.totalItems,
       accuracy,
@@ -296,29 +308,15 @@ const startRound: GameSessionService["startRound"] = async (
   const body = parseBody(rawBody, START_ROUND_FIELDS);
   const gameName = parseGameName(body.gameName);
   // gameLevel trong body cho phép chơi lại level cũ; level chưa mở bị resolveRoundRules từ chối
-  const {
-    mode,
-    gameLevel,
-    totalItems,
-    memorizeLimitSec,
-    recallLimitSec,
-    passAccuracy,
-  } = resolveRoundRules(
+  const { gameName: _gameName, ...rules } = resolveRoundRules(
     gameName,
     body,
     await findUnlockedLevel(player, gameName),
   );
-  const rules: StoredRoundRules = {
-    mode,
-    gameLevel,
-    totalItems,
-    memorizeLimitSec,
-    recallLimitSec,
-    passAccuracy,
-  };
+  const { gameLevel, totalItems, memorizeLimitSec } = rules;
 
   const engine = getGameEngine(gameName);
-  const items = engine.generateItems(totalItems, gameLevel);
+  const items = engine.generateItems(totalItems, gameLevel, undefined, rules.language);
   const startedAt = new Date();
   const session = await GameSession.create({
     ...ownerOf(player),
@@ -332,6 +330,7 @@ const startRound: GameSessionService["startRound"] = async (
 
   return {
     sessionId: session._id.toString(),
+    serverNow: startedAt,
     gameName,
     status: "memorizing",
     rules,
@@ -382,7 +381,7 @@ const startRecall: GameSessionService["startRecall"] = async (
 
 // Ván của người đã đăng nhập: ghi kết quả ván, tiến độ game và tiến độ tài khoản trong cùng một transaction,
 // hoặc cả ba cùng được ghi, hoặc không có gì thay đổi.
-const settleUserSession = async (
+export const settleUserSession = async (
   session: GameSessionRecord,
   userId: string,
   answers: (string | null)[],
@@ -411,6 +410,8 @@ const settleUserSession = async (
         );
       }
 
+      const initialProgress = gameProgress ?? createInitialGameProgress();
+      if (gameName === "number") initialProgress.unlockedLevel = Math.max(initialProgress.unlockedLevel, await findUnlockedLevel({ userId }, gameName));
       const settlement = settleRound(
         {
           gameName,
@@ -422,7 +423,7 @@ const settleUserSession = async (
           completedAt,
         },
         {
-          gameProgress: gameProgress ?? createInitialGameProgress(),
+          gameProgress: initialProgress,
           userProgress: user.progress ?? createInitialUserProgress(),
         },
       );

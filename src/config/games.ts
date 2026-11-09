@@ -2,11 +2,16 @@
 // frontend đọc các giá trị này qua API thay vì tự định nghĩa.
 
 // Sắp xếp từ thấp đến cao để so sánh kết quả
+import { FACENAME_LEVELS } from "./facename.js";
+import { NUMBER_LEVEL_DIGITS } from "./numbers.js";
+
 export const GAME_RESULTS = ["fail", "pass", "perfect"] as const;
 export type GameResult = (typeof GAME_RESULTS)[number];
 
-export const GAME_MODES = ["level", "custom"] as const;
+// daily: ván thử thách ngày, chỉ tạo qua /api/daily-challenge nên client không chọn được ở /api/game-sessions
+export const GAME_MODES = ["level", "custom", "daily"] as const;
 export type GameMode = (typeof GAME_MODES)[number];
+export const SELECTABLE_GAME_MODES = ["level", "custom"] as const satisfies readonly GameMode[];
 
 export interface GameConfig {
     // Số thẻ/hình cần nhớ ở từng level, phần tử đầu tiên là level 1
@@ -20,6 +25,10 @@ export interface GameConfig {
     passAccuracy: number;
     // Kết quả tối thiểu để mở level tiếp theo
     unlockOn: Exclude<GameResult, "fail">;
+    recallSecPerLevel?: readonly number[];
+    requiredScorePerLevel?: readonly number[];
+    customTimeRange?: { min: number; max: number };
+    wrongAnswerPenalty?: number;
 }
 
 export const GAME_CONFIGS = {
@@ -40,6 +49,40 @@ export const GAME_CONFIGS = {
         recallSec: 180,
         passAccuracy: 0.7,
         unlockOn: "perfect",
+    },
+    number: {
+        itemsPerLevel: NUMBER_LEVEL_DIGITS,
+        customItems: { min: 4, max: 80 },
+        memorizeSecOptions: [30, 60, 120, 300],
+        defaultMemorizeSec: 60,
+        recallSec: 300,
+        passAccuracy: 0.7,
+        unlockOn: "perfect",
+        customTimeRange: { min: 10, max: 600 },
+    },
+    facename: {
+        itemsPerLevel: FACENAME_LEVELS.map((level) => level.faceCount),
+        customItems: { min: 3, max: 30 },
+        memorizeSecOptions: [60],
+        defaultMemorizeSec: 60,
+        recallSec: 120,
+        recallSecPerLevel: FACENAME_LEVELS.map((level) => level.recallSeconds),
+        requiredScorePerLevel: FACENAME_LEVELS.map((level) => level.requiredScore),
+        customTimeRange: { min: 10, max: 300 },
+        wrongAnswerPenalty: 0.5,
+        passAccuracy: 0.7,
+        unlockOn: "pass",
+    },
+    word: {
+        itemsPerLevel: [6, 10, 14, 18, 22, 26, 30, 35, 42, 50],
+        customItems: { min: 4, max: 50 },
+        memorizeSecOptions: [30, 60, 120, 300],
+        defaultMemorizeSec: 60,
+        recallSec: 240,
+        requiredScorePerLevel: [4, 7, 10, 12, 15, 18, 20, 24, 28, 34],
+        passAccuracy: 2 / 3,
+        unlockOn: "pass",
+        customTimeRange: { min: 10, max: 600 },
     },
 } as const satisfies Record<string, GameConfig>;
 

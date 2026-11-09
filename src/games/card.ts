@@ -10,11 +10,11 @@ export const CARD_CODES: readonly string[] = SUITS.flatMap((suit) => RANKS.map((
 
 export const cardEngine: GameEngine = {
     gameName: "card",
-    generateItems: (count) => {
+    generateItems: (count, _level, random) => {
         if (!Number.isInteger(count) || count < 1 || count > CARD_CODES.length) {
             throw new RangeError(`Card count must be an integer from 1 to ${CARD_CODES.length}`);
         }
-        return shuffle(CARD_CODES).slice(0, count);
+        return shuffle(CARD_CODES, random).slice(0, count);
     },
     // Người chơi chọn lại từ đủ bộ 52 lá
     buildRecallOptions: () => [...CARD_CODES],

@@ -1,4 +1,5 @@
 import type { ConfiguredGameName } from "../config/games.js";
+import { getGameEngine } from "../games/index.js";
 import type { UserProgress } from "../models/user.js";
 import type { GameProgress, GameStats } from "../models/userGameProgress.js";
 import {
@@ -109,16 +110,17 @@ export const measureRoundTime = (
 export const compareAnswers = (
     items: readonly string[],
     answers: readonly (string | null)[],
+    matches: (expected: string, answer: string | null) => boolean = (expected, answer) => expected === answer,
 ): ItemResult[] =>
     items.map((expected, index) => {
         const answer = answers[index] ?? null;
-        return { expected, answer, correct: answer === expected };
+        return { expected, answer, correct: matches(expected, answer) };
     });
 
 // Chấm điểm và đo thời gian: phần chung của ván người đăng nhập và ván của khách
 const gradeSubmittedRound = (input: SettleRoundInput) => {
-    const perItem = compareAnswers(input.items, input.answers);
-    const graded = gradeRound(input.rules, perItem.filter((item) => item.correct).length);
+    const perItem = compareAnswers(input.items, input.answers, getGameEngine(input.gameName).matches);
+    const graded = gradeRound(input.rules, perItem.filter((item) => item.correct).length, perItem.filter((item) => !item.correct && item.answer !== null).length);
     const { memorizeSec, recallSec } = measureRoundTime(
         input.rules,
         input.startedAt,

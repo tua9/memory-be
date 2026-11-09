@@ -13,12 +13,12 @@ const imageUrlOf = (code: string) =>
 export const imageEngine: GameEngine = {
     gameName: "image",
     // Mỗi level có kho ảnh riêng; game hình không có ván tự chọn số lượng nên luôn có level
-    generateItems: (count, level) => {
+    generateItems: (count, level, random) => {
         const pool = SEED_IMAGES.filter((image) => image.level === level).map((image) => image.code);
         if (!Number.isInteger(count) || count < 1 || count > pool.length) {
             throw new RangeError(`Level ${level} has ${pool.length} images, cannot draw ${count}`);
         }
-        return shuffle(pool).slice(0, count);
+        return shuffle(pool, random).slice(0, count);
     },
     // Người chơi xếp lại chính các ảnh đã nhớ, theo thứ tự đã bị xáo trộn
     buildRecallOptions: (items) => shuffle(items),

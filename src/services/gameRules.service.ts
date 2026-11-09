@@ -2,7 +2,7 @@ import { StatusCodes } from "http-status-codes";
 import {
     CONFIGURED_GAME_NAMES,
     GAME_CONFIGS,
-    GAME_MODES,
+    SELECTABLE_GAME_MODES,
     GAME_RESULTS,
     type ConfiguredGameName,
     type GameConfig,
@@ -22,6 +22,9 @@ export interface RoundRules {
     memorizeLimitSec: number;
     recallLimitSec: number;
     passAccuracy: number;
+    requiredScore?: number;
+    wrongAnswerPenalty?: number;
+    language?: string;
 }
 
 export interface RoundSetupInput {
@@ -29,6 +32,8 @@ export interface RoundSetupInput {
     gameLevel?: unknown;
     itemCount?: unknown;
     memorizeSec?: unknown;
+    recallSec?: unknown;
+    language?: unknown;
 }
 
 export interface GradedRound {
@@ -36,13 +41,15 @@ export interface GradedRound {
     correctItems: number;
     accuracy: number;
     result: GameResult;
+    score?: number;
+    maxScore?: number;
 }
 
 const isInteger = (value: unknown): value is number =>
     typeof value === "number" && Number.isInteger(value);
 
-const isGameMode = (value: unknown): value is GameMode =>
-    typeof value === "string" && (GAME_MODES as readonly string[]).includes(value);
+const isSelectableMode = (value: unknown): value is (typeof SELECTABLE_GAME_MODES)[number] =>
+    typeof value === "string" && (SELECTABLE_GAME_MODES as readonly string[]).includes(value);
 
 const isResultAtLeast = (result: GameResult, minimum: GameResult): boolean =>
     GAME_RESULTS.indexOf(result) >= GAME_RESULTS.indexOf(minimum);
@@ -82,12 +89,13 @@ export const resolveRoundRules = (
 ): RoundRules => {
     const config = getGameConfig(gameName);
     const mode = input.mode ?? "level";
-    if (!isGameMode(mode)) {
-        throw new ApiError(StatusCodes.BAD_REQUEST, `mode must be one of: ${GAME_MODES.join(", ")}`);
+    if (!isSelectableMode(mode)) {
+        throw new ApiError(StatusCodes.BAD_REQUEST, `mode must be one of: ${SELECTABLE_GAME_MODES.join(", ")}`);
     }
 
     const memorizeSec = input.memorizeSec ?? config.defaultMemorizeSec;
-    if (!isInteger(memorizeSec) || !config.memorizeSecOptions.includes(memorizeSec)) {
+    const customTime = mode === "custom" ? config.customTimeRange : undefined;
+    if (!isInteger(memorizeSec) || (customTime ? memorizeSec < customTime.min || memorizeSec > customTime.max : !config.memorizeSecOptions.includes(memorizeSec))) {
         throw new ApiError(
             StatusCodes.BAD_REQUEST,
             `memorizeSec must be one of: ${config.memorizeSecOptions.join(", ")}`,
@@ -100,6 +108,8 @@ export const resolveRoundRules = (
         memorizeLimitSec: memorizeSec,
         recallLimitSec: config.recallSec,
         passAccuracy: config.passAccuracy,
+        ...(config.wrongAnswerPenalty !== undefined ? { wrongAnswerPenalty: config.wrongAnswerPenalty } : {}),
+        ...(typeof input.language === "string" ? { language: input.language } : {}),
     };
 
     if (mode === "custom") {
@@ -113,12 +123,17 @@ export const resolveRoundRules = (
         if (!isInteger(input.itemCount) || input.itemCount < min || input.itemCount > max) {
             throw new ApiError(StatusCodes.BAD_REQUEST, `itemCount must be an integer from ${min} to ${max}`);
         }
-        return { ...baseRules, gameLevel: null, totalItems: input.itemCount };
+        const recallSec = input.recallSec ?? config.recallSec;
+        if (input.recallSec !== undefined && (!customTime || !isInteger(recallSec) || recallSec < customTime.min || recallSec > customTime.max)) {
+            throw new ApiError(StatusCodes.BAD_REQUEST, "recallSec is outside the allowed custom range");
+        }
+        return { ...baseRules, gameLevel: null, totalItems: input.itemCount, recallLimitSec: recallSec as number };
     }
 
     if (input.itemCount !== undefined) {
         throw new ApiError(StatusCodes.BAD_REQUEST, "itemCount is only allowed in custom mode");
     }
+    if (input.recallSec !== undefined) throw new ApiError(StatusCodes.BAD_REQUEST, "recallSec is only allowed in custom mode");
     const maxLevel = getMaxLevel(gameName);
     // Config có thể bị giảm số level sau này, nên không để level đã mở vượt quá level cao nhất
     const highestPlayableLevel = Math.min(unlockedLevel, maxLevel);
@@ -130,12 +145,17 @@ export const resolveRoundRules = (
         throw new ApiError(StatusCodes.FORBIDDEN, `Level ${gameLevel} is locked`);
     }
 
-    return { ...baseRules, gameLevel, totalItems: getItemCountForLevel(gameName, gameLevel) };
+    return {
+        ...baseRules, gameLevel, totalItems: getItemCountForLevel(gameName, gameLevel),
+        recallLimitSec: config.recallSecPerLevel?.[gameLevel - 1] ?? config.recallSec,
+        ...(config.requiredScorePerLevel ? { requiredScore: config.requiredScorePerLevel[gameLevel - 1] } : {}),
+    };
 };
 
 export const gradeRound = (
-    rules: Pick<RoundRules, "totalItems" | "passAccuracy">,
+    rules: Pick<RoundRules, "totalItems" | "passAccuracy" | "requiredScore" | "wrongAnswerPenalty">,
     correctItems: number,
+    wrongItems = 0,
 ): GradedRound => {
     const { totalItems, passAccuracy } = rules;
     if (!isInteger(totalItems) || totalItems < 1) {
@@ -146,13 +166,15 @@ export const gradeRound = (
     }
 
     const accuracy = correctItems / totalItems;
+    if (!isInteger(wrongItems) || wrongItems < 0 || correctItems + wrongItems > totalItems) throw new RangeError("Invalid wrongItems count");
+    const score = correctItems - wrongItems * (rules.wrongAnswerPenalty ?? 0);
     let result: GameResult = "fail";
     if (correctItems === totalItems) {
         result = "perfect";
-    } else if (accuracy >= passAccuracy) {
+    } else if (score >= (rules.requiredScore ?? totalItems * passAccuracy)) {
         result = "pass";
     }
-    return { totalItems, correctItems, accuracy, result };
+    return { totalItems, correctItems, accuracy, result, ...(rules.wrongAnswerPenalty !== undefined ? { score, maxScore: totalItems } : {}) };
 };
 
 // Chỉ mở level mới khi chơi đúng level cao nhất đã mở và đạt kết quả yêu cầu; ván tự chọn không mở level

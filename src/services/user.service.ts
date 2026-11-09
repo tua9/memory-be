@@ -21,6 +21,10 @@ interface UserInfo {
     username: string;
     status: string;
     role: string;
+    avatarUrl?: string | null;
+    authProvider?: string;
+    isEmailVerified?: boolean;
+    hasPassword?: boolean;
 }
 
 export interface AuthTokens {
@@ -42,6 +46,10 @@ const buildUserInfo = (user: UserDocument): UserInfo => ({
     username: user.username,
     status: user.status,
     role: user.role,
+    avatarUrl: user.avatarUrl ?? null,
+    authProvider: user.authProvider ?? "local",
+    isEmailVerified: user.isEmailVerified ?? false,
+    hasPassword: Boolean(user.passwordHash),
 });
 
 const asCredentials = (body: unknown): CredentialsBody =>
@@ -275,4 +283,147 @@ const signOut = async (token?: unknown): Promise<void> => {
     }
 };
 
-export const authService = { signUp, signIn, signOut, refreshToken };
+interface GoogleProfile {
+    sub: string;
+    email: string;
+    email_verified: boolean;
+    name?: string;
+    picture?: string;
+}
+
+const googleSignIn = async (token: unknown): Promise<AuthTokens> => {
+    if (typeof token !== "string" || !token.trim()) {
+        throw new ApiError(StatusCodes.BAD_REQUEST, "Google token is required");
+    }
+
+    let profile: GoogleProfile;
+    try {
+        const response = await fetch("https://www.googleapis.com/oauth2/v3/userinfo", {
+            headers: { Authorization: `Bearer ${token}` },
+        });
+
+        if (!response.ok) {
+            throw new ApiError(
+                StatusCodes.UNAUTHORIZED,
+                "Google token is invalid or expired",
+            );
+        }
+
+        profile = (await response.json()) as GoogleProfile;
+    } catch (error) {
+        if (error instanceof ApiError) throw error;
+        throw new ApiError(
+            StatusCodes.UNAUTHORIZED,
+            "Failed to authenticate with Google",
+        );
+    }
+
+    if (!profile.email_verified) {
+        throw new ApiError(
+            StatusCodes.UNAUTHORIZED,
+            "Google email is not verified",
+        );
+    }
+
+    const normalizedEmail = profile.email.trim().toLowerCase();
+    const googleId = profile.sub;
+
+    let user = await User.findOne({
+        $or: [{ googleId }, { email: normalizedEmail }],
+    });
+
+    if (user) {
+        ensureAccountCanSignIn(user);
+        let hasChanges = false;
+
+        if (!user.googleId) {
+            user.googleId = googleId;
+            user.isEmailVerified = true;
+            hasChanges = true;
+        }
+        if (!user.avatarUrl && profile.picture) {
+            user.avatarUrl = profile.picture;
+            hasChanges = true;
+        }
+        if (!user.isEmailVerified) {
+            user.isEmailVerified = true;
+            hasChanges = true;
+        }
+
+        if (hasChanges) {
+            await user.save();
+        }
+    } else {
+        user = await User.create({
+            username: profile.name?.trim() || normalizedEmail.split("@")[0],
+            email: normalizedEmail,
+            googleId,
+            avatarUrl: profile.picture || null,
+            authProvider: "google",
+            isEmailVerified: true,
+            status: "active",
+            role: "user",
+            passwordHash: null,
+        });
+    }
+
+    const tokens = await generateTokens(user, true);
+
+    await Session.create({
+        userId: user._id,
+        refreshToken: hashToken(tokens.refreshToken),
+        expiresAt: tokens.refreshExpiresAt,
+    });
+
+    return tokens;
+};
+
+const setPassword = async (userId: string, body: unknown): Promise<void> => {
+    const data = typeof body === "object" && body !== null ? (body as Record<string, unknown>) : {};
+    const { currentPassword, newPassword } = data;
+
+    if (
+        typeof newPassword !== "string" ||
+        newPassword.length < 8 ||
+        Buffer.byteLength(newPassword, "utf8") > 72
+    ) {
+        throw new ApiError(
+            StatusCodes.BAD_REQUEST,
+            "Password must be at least 8 characters and not exceed 72 bytes",
+        );
+    }
+
+    const user = await User.findById(userId);
+    if (!user) {
+        throw new ApiError(StatusCodes.NOT_FOUND, "User not found");
+    }
+
+    // Nếu tài khoản đã có mật khẩu, yêu cầu và xác thực mật khẩu hiện tại
+    if (user.passwordHash) {
+        if (typeof currentPassword !== "string" || !currentPassword) {
+            throw new ApiError(
+                StatusCodes.BAD_REQUEST,
+                "Current password is required",
+            );
+        }
+        const isMatch = await bcrypt.compare(currentPassword, user.passwordHash);
+        if (!isMatch) {
+            throw new ApiError(
+                StatusCodes.BAD_REQUEST,
+                "Current password is incorrect",
+            );
+        }
+    }
+
+    user.passwordHash = await bcrypt.hash(newPassword, 10);
+    await user.save();
+};
+
+export const authService = {
+    signUp,
+    signIn,
+    signOut,
+    refreshToken,
+    googleSignIn,
+    setPassword,
+};

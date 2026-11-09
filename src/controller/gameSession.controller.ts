@@ -37,6 +37,7 @@ export const createGameSessionController = (
       setGuestCookie(response, player.guestId);
     }
     const session = await service.startRound(player, request.body);
+    response.set("Cache-Control", "no-store");
     response.status(StatusCodes.CREATED).json({
       status: "success",
       message: "Game round started",
@@ -50,6 +51,7 @@ export const createGameSessionController = (
       requirePlayer(request),
       routeParam(request, "sessionId"),
     );
+    response.set("Cache-Control", "no-store");
     response.status(StatusCodes.OK).json({
       status: "success",
       message: "Recall phase started",
@@ -64,6 +66,7 @@ export const createGameSessionController = (
       routeParam(request, "sessionId"),
       request.body,
     );
+    response.set("Cache-Control", "no-store");
     response.status(StatusCodes.OK).json({
       status: "success",
       message: "Game round submitted",
