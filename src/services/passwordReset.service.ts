@@ -12,6 +12,7 @@ import {
 } from "../config/passwordReset.js";
 import {
     mongoPasswordResetRepository,
+    mongoParentPasswordResetRepository,
     type PasswordResetRepository,
     type SendLimitState,
 } from "../repositories/passwordReset.repository.js";
@@ -39,6 +40,7 @@ export interface PasswordResetDependencies {
     clock?: () => Date;
     clientUrl?: string;
     hashPassword?: (password: string) => Promise<string>;
+    resetPath?: string;
 }
 
 const hashToken = (token: string): string => createHash("sha256").update(token).digest("hex");
@@ -92,11 +94,12 @@ interface SendLinkDependencies {
     mailer: MailService;
     clock: () => Date;
     clientUrl: string;
+    resetPath: string;
 }
 
 // Giữ lượt gửi, tạo link rồi gửi email; lỗi ở bất kỳ bước nào thì bỏ link vừa tạo và trả lại lượt gửi
 const sendResetLink = async (
-    { repository, mailer, clock, clientUrl }: SendLinkDependencies,
+    { repository, mailer, clock, clientUrl, resetPath }: SendLinkDependencies,
     account: { id: string; email: string },
 ): Promise<RequestLinkResult> => {
     const now = clock();
@@ -117,7 +120,7 @@ const sendResetLink = async (
             expiresAt: new Date(now.getTime() + PASSWORD_RESET_TOKEN_TTL_MS),
         });
         // Link luôn dựng từ cấu hình; token nằm ở fragment (#) nên không gửi lên server hay vào Referer
-        const link = `${clientUrl.replace(/\/+$/, "")}/reset-password#token=${token}`;
+        const link = `${clientUrl.replace(/\/+$/, "")}${resetPath}#token=${token}`;
         await mailer.send({
             to: account.email,
             ...buildPasswordResetEmail({
@@ -147,9 +150,10 @@ export const createPasswordResetService = ({
     mailer = smtpMailService,
     clock = () => new Date(),
     clientUrl = env.CLIENT_URL,
+    resetPath = "/reset-password",
     hashPassword = (password) => bcrypt.hash(password, 10),
 }: PasswordResetDependencies = {}): PasswordResetService => ({
-    requestLink: (user) => sendResetLink({ repository, mailer, clock, clientUrl }, user),
+    requestLink: (user) => sendResetLink({ repository, mailer, clock, clientUrl, resetPath }, user),
 
     forgotPassword: async (rawEmail: unknown) => {
         if (typeof rawEmail !== "string" || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(rawEmail.trim())) {
@@ -165,7 +169,7 @@ export const createPasswordResetService = ({
         // Email có tài khoản hay không, đang bị giới hạn hay gửi lỗi, đều trả cùng kết quả và gần cùng thời gian:
         // việc gửi chạy nền và lỗi chỉ ghi log, để không ai dò được email nào đã đăng ký.
         if (account && account.status === "active") {
-            void sendResetLink({ repository, mailer, clock, clientUrl }, account).catch((error: unknown) => {
+            void sendResetLink({ repository, mailer, clock, clientUrl, resetPath }, account).catch((error: unknown) => {
                 console.warn(
                     "Forgot password: reset link not sent:",
                     error instanceof ApiError ? error.code ?? error.statusCode : (error as Error).name,
@@ -234,4 +238,8 @@ export const createPasswordResetService = ({
 });
 
 export const passwordResetService = createPasswordResetService();
+export const parentPasswordResetService = createPasswordResetService({
+    repository: mongoParentPasswordResetRepository,
+    resetPath: "/parent/reset-password",
+});
 

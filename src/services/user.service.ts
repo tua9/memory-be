@@ -1,6 +1,7 @@
 import bcrypt from "bcrypt";
 import { createHash, randomUUID } from "node:crypto";
 import { StatusCodes } from "http-status-codes";
+import { Types } from "mongoose";
 import type { JwtPayload, SignOptions } from "jsonwebtoken";
 import { env } from "../config/env";
 import User, { type UserDocument } from "../models/user";
@@ -10,19 +11,25 @@ import NumberSession from "../models/numberSession";
 import UserGameProgress from "../models/userGameProgress";
 import PasswordResetToken from "../models/passwordResetToken";
 import PasswordResetLimit from "../models/passwordResetLimit";
+import LoginIdentity from "../models/loginIdentity.js";
+import FamilyRoom from "../models/familyRoom.js";
+import ParentPoints from "../models/parentPoints.js";
+import ParentVerification from "../models/parentVerification.js";
+import Parent, { type ParentDocument } from "../models/parent.js";
+import { confirmLoginEmail, releaseLoginEmail, reserveLoginEmail } from "./loginIdentity.service.js";
 import { JwtProvider } from "../providers/JwtProvider";
 import ApiError from "../utils/ApiError";
 import { assertValidNewPassword } from "../utils/password";
 import { PASSWORD_RESET_ERROR_CODES } from "../config/passwordReset";
 
 interface CredentialsBody {
-    email?: unknown;
-    password?: unknown;
-    username?: unknown;
-    rememberMe?: unknown;
+  email?: unknown;
+  password?: unknown;
+  username?: unknown;
+  rememberMe?: unknown;
 }
 
-interface UserInfo {
+export interface UserInfo {
     _id: string;
     email: string;
     username: string;
@@ -35,19 +42,29 @@ interface UserInfo {
 }
 
 export interface AuthTokens {
-    accessToken: string;
-    refreshToken: string;
-    accessExpiresAt: Date;
-    refreshExpiresAt: Date;
-    // false: cookie chỉ sống đến khi đóng trình duyệt và phiên có thời hạn ngắn hơn
-    rememberMe: boolean;
-    userInfo: UserInfo;
+  accessToken: string;
+  refreshToken: string;
+  accessExpiresAt: Date;
+  refreshExpiresAt: Date;
+  // false: cookie chỉ sống đến khi đóng trình duyệt và phiên có thời hạn ngắn hơn
+  rememberMe: boolean;
+  userInfo: UserInfo;
 }
 
 const hashToken = (token: string): string =>
-    createHash("sha256").update(token).digest("hex");
+  createHash("sha256").update(token).digest("hex");
 
-const buildUserInfo = (user: UserDocument): UserInfo => ({
+const buildUserInfo = (user: UserDocument | ParentDocument): UserInfo => "childUserId" in user ? ({
+    _id: user._id.toString(),
+    email: user.email,
+    username: user.fullname,
+    status: "active",
+    role: "parent",
+    avatarUrl: null,
+    authProvider: "local",
+    isEmailVerified: Boolean(user.emailVerifiedAt),
+    hasPassword: true,
+}) : ({
     _id: user._id.toString(),
     email: user.email,
     username: user.username,
@@ -60,60 +77,59 @@ const buildUserInfo = (user: UserDocument): UserInfo => ({
 });
 
 const asCredentials = (body: unknown): CredentialsBody =>
-    typeof body === "object" && body !== null ? (body as CredentialsBody) : {};
+  typeof body === "object" && body !== null ? (body as CredentialsBody) : {};
 
 const validateCredentials = (
-    body: unknown,
+  body: unknown,
 ): { email: string; password: string } => {
-    const { email, password } = asCredentials(body);
-    if (
-        typeof email !== "string" ||
-        !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())
-    ) {
-        throw new ApiError(
-            StatusCodes.BAD_REQUEST,
-            "A valid email is required",
-        );
-    }
-    if (
-        typeof password !== "string" ||
-        !password ||
-        Buffer.byteLength(password, "utf8") > 72
-    ) {
-        throw new ApiError(
-            StatusCodes.BAD_REQUEST,
-            "Password is required and must not exceed 72 bytes",
-        );
-    }
-    return { email: email.trim().toLowerCase(), password };
+  const { email, password } = asCredentials(body);
+  if (
+    typeof email !== "string" ||
+    !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())
+  ) {
+    throw new ApiError(StatusCodes.BAD_REQUEST, "A valid email is required");
+  }
+  if (
+    typeof password !== "string" ||
+    !password ||
+    Buffer.byteLength(password, "utf8") > 72
+  ) {
+    throw new ApiError(
+      StatusCodes.BAD_REQUEST,
+      "Password is required and must not exceed 72 bytes",
+    );
+  }
+  return { email: email.trim().toLowerCase(), password };
 };
 
 const ensureAccountCanSignIn = (user: UserDocument): void => {
-    if (user.status !== "active") {
-        throw new ApiError(StatusCodes.FORBIDDEN, "Account is not active");
-    }
+  if (user.status !== "active") {
+    throw new ApiError(StatusCodes.FORBIDDEN, "Account is not active");
+  }
 };
 
 const generateTokens = async (
-    user: UserDocument,
+    user: UserDocument | ParentDocument,
     rememberMe: boolean,
 ): Promise<AuthTokens> => {
-    if (
-        !env.ACCESS_TOKEN_SECRET ||
-        !env.REFRESH_TOKEN_SECRET ||
-        env.ACCESS_TOKEN_SECRET === env.REFRESH_TOKEN_SECRET
-    ) {
-        throw new ApiError(
-            StatusCodes.INTERNAL_SERVER_ERROR,
-            "Distinct JWT secrets must be configured",
-        );
-    }
+  if (
+    !env.ACCESS_TOKEN_SECRET ||
+    !env.REFRESH_TOKEN_SECRET ||
+    env.ACCESS_TOKEN_SECRET === env.REFRESH_TOKEN_SECRET
+  ) {
+    throw new ApiError(
+      StatusCodes.INTERNAL_SERVER_ERROR,
+      "Distinct JWT secrets must be configured",
+    );
+  }
 
     const subject = user._id.toString();
+    const accountType = "childUserId" in user ? "parent" : "user";
     const accessToken = await JwtProvider.generateToken(
         {
             sub: subject,
-            role: user.role,
+            role: accountType === "parent" ? "parent" : (user as UserDocument).role,
+            accountType,
             tokenType: "access",
             jti: randomUUID(),
         },
@@ -122,7 +138,7 @@ const generateTokens = async (
     );
     const refreshToken = await JwtProvider.generateToken(
         // rememberMe nằm trong payload đã ký để refresh giữ đúng lựa chọn lúc đăng nhập
-        { sub: subject, tokenType: "refresh", jti: randomUUID(), rememberMe },
+        { sub: subject, accountType, tokenType: "refresh", jti: randomUUID(), rememberMe },
         env.REFRESH_TOKEN_SECRET,
         (rememberMe
             ? env.REFRESH_TOKEN_TTL
@@ -146,14 +162,14 @@ const generateTokens = async (
         );
     }
 
-    return {
-        accessToken,
-        refreshToken,
-        accessExpiresAt: new Date(accessPayload.exp * 1000),
-        refreshExpiresAt: new Date(refreshPayload.exp * 1000),
-        rememberMe,
-        userInfo: buildUserInfo(user),
-    };
+  return {
+    accessToken,
+    refreshToken,
+    accessExpiresAt: new Date(accessPayload.exp * 1000),
+    refreshExpiresAt: new Date(refreshPayload.exp * 1000),
+    rememberMe,
+    userInfo: buildUserInfo(user),
+  };
 };
 
 const signUp = async (body: unknown): Promise<UserInfo> => {
@@ -171,35 +187,39 @@ const signUp = async (body: unknown): Promise<UserInfo> => {
             "User name must be 2-100 characters and password at least 8 characters",
         );
     }
-    if (await User.findOne({ email })) {
-        throw new ApiError(StatusCodes.CONFLICT, "Email already exists");
-    }
-
     const passwordHash = await bcrypt.hash(password, 10);
+    const accountId = new Types.ObjectId();
+    await reserveLoginEmail(email, "user", accountId);
+    let user: UserDocument;
     try {
-        const user = await User.create({
+        user = await User.create({
+            _id: accountId,
             email,
             username: normalizedUserName,
             passwordHash,
             role: "user",
             status: "active",
         });
-        return buildUserInfo(user);
     } catch (error) {
+        await releaseLoginEmail(email, accountId);
         if ((error as { code?: number }).code === 11000) {
             throw new ApiError(StatusCodes.CONFLICT, "Email already exists");
         }
         throw error;
     }
+    await confirmLoginEmail(email, accountId).catch(() => undefined);
+    return buildUserInfo(user);
 };
 
 const signIn = async (body: unknown): Promise<AuthTokens> => {
     const { email, password } = validateCredentials(body);
-    const user = await User.findOne({ email });
+    const [user, parent] = await Promise.all([User.findOne({ email }), Parent.findOne({ email })]);
+    if (user && parent) throw new ApiError(StatusCodes.CONFLICT, "Ambiguous login identity");
+    const account = user ?? parent;
 
     if (
-        !user?.passwordHash ||
-        !(await bcrypt.compare(password, user.passwordHash))
+        !account?.passwordHash ||
+        !(await bcrypt.compare(password, account.passwordHash))
     ) {
         throw new ApiError(
             StatusCodes.UNAUTHORIZED,
@@ -207,68 +227,62 @@ const signIn = async (body: unknown): Promise<AuthTokens> => {
         );
     }
 
-    ensureAccountCanSignIn(user);
+    if (user) ensureAccountCanSignIn(user);
 
     const rememberMe = asCredentials(body).rememberMe === true;
-    const tokens = await generateTokens(user, rememberMe);
+    const tokens = await generateTokens(account, rememberMe);
 
     await Session.create({
-        userId: user._id,
+        ...(user ? { userId: user._id } : { parentId: parent?._id }),
+        accountType: user ? "user" : "parent",
         refreshToken: hashToken(tokens.refreshToken),
         expiresAt: tokens.refreshExpiresAt,
     });
 
-    return tokens;
+  return tokens;
 };
 
 const refreshToken = async (token: unknown): Promise<AuthTokens> => {
-    if (typeof token !== "string" || !token) {
-        throw new ApiError(
-            StatusCodes.UNAUTHORIZED,
-            "Refresh token is required",
-        );
-    }
+  if (typeof token !== "string" || !token) {
+    throw new ApiError(StatusCodes.UNAUTHORIZED, "Refresh token is required");
+  }
 
-    let payload: JwtPayload;
-    try {
-        payload = await JwtProvider.verifyToken(
-            token,
-            env.REFRESH_TOKEN_SECRET,
-        );
-    } catch (error) {
-        if (
-            error instanceof Error &&
-            [
-                "TokenExpiredError",
-                "JsonWebTokenError",
-                "NotBeforeError",
-            ].includes(error.name)
-        ) {
-            throw new ApiError(
-                StatusCodes.UNAUTHORIZED,
-                "Invalid or expired refresh token",
-            );
-        }
-        throw error;
-    }
+  let payload: JwtPayload;
+  try {
+    payload = await JwtProvider.verifyToken(token, env.REFRESH_TOKEN_SECRET);
+  } catch (error) {
     if (
-        payload.tokenType !== "refresh" ||
-        typeof payload.sub !== "string" ||
-        !/^[a-f\d]{24}$/i.test(payload.sub)
+      error instanceof Error &&
+      ["TokenExpiredError", "JsonWebTokenError", "NotBeforeError"].includes(
+        error.name,
+      )
     ) {
-        throw new ApiError(StatusCodes.UNAUTHORIZED, "Invalid refresh token");
+      throw new ApiError(
+        StatusCodes.UNAUTHORIZED,
+        "Invalid or expired refresh token",
+      );
     }
+    throw error;
+  }
+  if (
+    payload.tokenType !== "refresh" ||
+    typeof payload.sub !== "string" ||
+    !/^[a-f\d]{24}$/i.test(payload.sub)
+  ) {
+    throw new ApiError(StatusCodes.UNAUTHORIZED, "Invalid refresh token");
+  }
 
-    const user = await User.findById(payload.sub);
-    if (!user) {
+    const accountType = payload.accountType === "parent" ? "parent" : "user";
+    const account = accountType === "parent" ? await Parent.findById(payload.sub) : await User.findById(payload.sub);
+    if (!account) {
         throw new ApiError(StatusCodes.UNAUTHORIZED, "Account is unavailable");
     }
-    ensureAccountCanSignIn(user);
+    if (accountType === "user") ensureAccountCanSignIn(account as UserDocument);
     // Token cấp trước khi có rememberMe không có trường này: giữ hành vi cũ là duy trì đăng nhập
-    const tokens = await generateTokens(user, payload.rememberMe !== false);
+    const tokens = await generateTokens(account, payload.rememberMe !== false);
     const session = await Session.findOneAndUpdate(
         {
-            userId: user._id,
+            ...(accountType === "parent" ? { parentId: account._id } : { userId: account._id }),
             refreshToken: hashToken(token),
             expiresAt: { $gt: new Date() },
         },
@@ -286,29 +300,28 @@ const refreshToken = async (token: unknown): Promise<AuthTokens> => {
 };
 
 const signOut = async (token?: unknown): Promise<void> => {
-    if (typeof token === "string" && token) {
-        await Session.deleteOne({ refreshToken: hashToken(token) });
-    }
+  if (typeof token === "string" && token) {
+    await Session.deleteOne({ refreshToken: hashToken(token) });
+  }
 };
 
 interface GoogleProfile {
-    sub: string;
-    email: string;
-    email_verified: boolean;
-    name?: string;
-    picture?: string;
+  sub: string;
+  email: string;
+  email_verified: boolean;
+  name?: string;
+  picture?: string;
 }
 
 const GOOGLE_ID_TOKEN_ISSUERS = ["accounts.google.com", "https://accounts.google.com"];
 
 // Id token từ Google Sign-In trên mobile. Endpoint tokeninfo kiểm tra chữ ký và hạn;
-// backend còn phải chắc token được cấp cho app này (aud), nếu không token đăng nhập app khác cũng dùng được.
-// Trên mobile cấu hình webClientId = GOOGLE_CLIENT_ID để id token mang aud này.
+// client_id phải trùng với GOOGLE_CLIENT_ID của ứng dụng.
 const fetchGoogleIdTokenProfile = async (idToken: string): Promise<GoogleProfile> => {
     if (!env.GOOGLE_CLIENT_ID) {
         throw new ApiError(
             StatusCodes.INTERNAL_SERVER_ERROR,
-            "Google client ID must be configured",
+            "Google sign in is not configured",
         );
     }
 
@@ -362,33 +375,36 @@ const googleSignInWithIdToken = async (idToken: unknown): Promise<AuthTokens> =>
 };
 
 const googleSignIn = async (token: unknown): Promise<AuthTokens> => {
-    if (typeof token !== "string" || !token.trim()) {
-        throw new ApiError(StatusCodes.BAD_REQUEST, "Google token is required");
+  if (typeof token !== "string" || !token.trim()) {
+    throw new ApiError(StatusCodes.BAD_REQUEST, "Google token is required");
+  }
+
+  let profile: GoogleProfile;
+  try {
+    const response = await fetch(
+      "https://www.googleapis.com/oauth2/v3/userinfo",
+      {
+        headers: { Authorization: `Bearer ${token}` },
+      },
+    );
+
+    if (!response.ok) {
+      throw new ApiError(
+        StatusCodes.UNAUTHORIZED,
+        "Google token is invalid or expired",
+      );
     }
 
-    let profile: GoogleProfile;
-    try {
-        const response = await fetch("https://www.googleapis.com/oauth2/v3/userinfo", {
-            headers: { Authorization: `Bearer ${token}` },
-        });
+    profile = (await response.json()) as GoogleProfile;
+  } catch (error) {
+    if (error instanceof ApiError) throw error;
+    throw new ApiError(
+      StatusCodes.UNAUTHORIZED,
+      "Failed to authenticate with Google",
+    );
+  }
 
-        if (!response.ok) {
-            throw new ApiError(
-                StatusCodes.UNAUTHORIZED,
-                "Google token is invalid or expired",
-            );
-        }
-
-        profile = (await response.json()) as GoogleProfile;
-    } catch (error) {
-        if (error instanceof ApiError) throw error;
-        throw new ApiError(
-            StatusCodes.UNAUTHORIZED,
-            "Failed to authenticate with Google",
-        );
-    }
-
-    return signInWithGoogleProfile(profile);
+  return signInWithGoogleProfile(profile);
 };
 
 // Tìm hoặc tạo tài khoản từ hồ sơ Google đã xác thực, rồi mở phiên đăng nhập
@@ -402,6 +418,10 @@ const signInWithGoogleProfile = async (profile: GoogleProfile): Promise<AuthToke
 
     const normalizedEmail = profile.email.trim().toLowerCase();
     const googleId = profile.sub;
+
+    if (await Parent.exists({ email: normalizedEmail })) {
+        throw new ApiError(StatusCodes.CONFLICT, "Email already belongs to another account");
+    }
 
     let user = await User.findOne({
         $or: [{ googleId }, { email: normalizedEmail }],
@@ -429,23 +449,33 @@ const signInWithGoogleProfile = async (profile: GoogleProfile): Promise<AuthToke
             await user.save();
         }
     } else {
-        user = await User.create({
-            username: profile.name?.trim() || normalizedEmail.split("@")[0],
-            email: normalizedEmail,
-            googleId,
-            avatarUrl: profile.picture || null,
-            authProvider: "google",
-            isEmailVerified: true,
-            status: "active",
-            role: "user",
-            passwordHash: null,
-        });
+        const accountId = new Types.ObjectId();
+        await reserveLoginEmail(normalizedEmail, "user", accountId);
+        try {
+            user = await User.create({
+                _id: accountId,
+                username: profile.name?.trim() || normalizedEmail.split("@")[0],
+                email: normalizedEmail,
+                googleId,
+                avatarUrl: profile.picture || null,
+                authProvider: "google",
+                isEmailVerified: true,
+                status: "active",
+                role: "user",
+                passwordHash: null,
+            });
+        } catch (error) {
+            await releaseLoginEmail(normalizedEmail, accountId);
+            throw error;
+        }
+        await confirmLoginEmail(normalizedEmail, accountId).catch(() => undefined);
     }
 
     const tokens = await generateTokens(user, true);
 
     await Session.create({
         userId: user._id,
+        accountType: "user",
         refreshToken: hashToken(tokens.refreshToken),
         expiresAt: tokens.refreshExpiresAt,
     });
@@ -513,6 +543,7 @@ const changePassword = async (
 
 // Xoá tài khoản và mọi dữ liệu gắn với nó (App Store/Google Play yêu cầu app có chức năng này).
 // Tài khoản có mật khẩu phải nhập lại mật khẩu; tài khoản Google chưa đặt mật khẩu chỉ cần đang đăng nhập.
+// Tài khoản phụ huynh chỉ tồn tại để theo dõi một bé (childUserId), nên xoá bé thì xoá luôn phụ huynh.
 // Thu hồi phiên trước, xoá user sau cùng: lỗi giữa chừng chỉ để lại dữ liệu mồ côi, không để tài khoản mất dở.
 const deleteAccount = async (userId: string, body: unknown): Promise<void> => {
     const password = (typeof body === "object" && body !== null ? (body as Record<string, unknown>) : {}).password;
@@ -529,15 +560,41 @@ const deleteAccount = async (userId: string, body: unknown): Promise<void> => {
         }
     }
 
+    const parent = await Parent.findOne({ childUserId: user._id }).select("_id");
     await Session.deleteMany({ userId: user._id });
+    if (parent) {
+        await Session.deleteMany({ parentId: parent._id });
+        await Promise.all([
+            FamilyRoom.deleteMany({ parentId: parent._id }),
+            ParentPoints.deleteMany({ parentId: parent._id }),
+            ParentVerification.deleteMany({ parentId: parent._id }),
+            LoginIdentity.deleteMany({ accountId: parent._id }),
+        ]);
+        await Parent.deleteOne({ _id: parent._id });
+    }
     await Promise.all([
         GameSession.deleteMany({ userId: user._id }),
         NumberSession.deleteMany({ userId: user._id }),
         UserGameProgress.deleteMany({ userId: user._id }),
         PasswordResetToken.deleteMany({ userId: user._id }),
         PasswordResetLimit.deleteMany({ userId: user._id }),
+        FamilyRoom.deleteMany({ childUserId: user._id }),
+        // Giải phóng email để có thể đăng ký lại bằng chính email này.
+        LoginIdentity.deleteMany({ accountId: user._id }),
     ]);
     await User.deleteOne({ _id: user._id });
+};
+
+const setPassword = async (userId: string, body: unknown): Promise<void> => {
+    const data =
+        typeof body === "object" && body !== null
+            ? (body as Record<string, unknown>)
+            : {};
+    return changePassword(userId, {
+        currentPassword: data.currentPassword,
+        newPassword: data.newPassword,
+        confirmPassword: data.confirmPassword ?? data.newPassword,
+    });
 };
 
 export const authService = {
@@ -549,4 +606,5 @@ export const authService = {
     googleSignInWithIdToken,
     changePassword,
     deleteAccount,
+    setPassword,
 };

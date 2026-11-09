@@ -10,6 +10,9 @@ import numberSessionRoute from "./numberSessionRoute.js";
 import faceNameRoute from "./faceNameRoute.js";
 import wordsSessionRoute from "./wordsSessionRoute.js";
 import passwordResetRoute from "./passwordResetRoute.js";
+import parentRoute from "./parentRoute.js";
+import familyRoomRoute from "./familyRoomRoute.js";
+import parentPasswordResetRoute from "./parentPasswordResetRoute.js";
 import { forgotPasswordIpLimiter, passwordResetIpLimiter } from "../middlewares/rateLimit.js";
 
 const router = express.Router();
@@ -19,8 +22,12 @@ router.get("/", (_request, response) => {
 });
 
 router.use("/auth", authRoute);
+router.use("/parent", parentRoute);
+router.use("/family-rooms", familyRoomRoute);
 router.use("/password-reset/forgot", forgotPasswordIpLimiter);
+router.use("/parent/password-reset/forgot", forgotPasswordIpLimiter);
 router.use("/password-reset", passwordResetIpLimiter, passwordResetRoute);
+router.use("/parent/password-reset", passwordResetIpLimiter, parentPasswordResetRoute);
 router.use("/profile", profileRoute);
 router.use("/game-sessions", gameSessionRoute);
 router.use("/game-sessions", gameHistoryRoute);

@@ -10,6 +10,11 @@ import NumberSession from "../src/models/numberSession.js";
 import UserGameProgress from "../src/models/userGameProgress.js";
 import PasswordResetToken from "../src/models/passwordResetToken.js";
 import PasswordResetLimit from "../src/models/passwordResetLimit.js";
+import LoginIdentity from "../src/models/loginIdentity.js";
+import FamilyRoom from "../src/models/familyRoom.js";
+import ParentPoints from "../src/models/parentPoints.js";
+import ParentVerification from "../src/models/parentVerification.js";
+import Parent from "../src/models/parent.js";
 import ApiError from "../src/utils/ApiError.js";
 
 const USER_ID = "507f1f77bcf86cd799439011";
@@ -23,19 +28,28 @@ const MODELS: [string, Patchable][] = [
     ["progress", UserGameProgress as unknown as Patchable],
     ["resetToken", PasswordResetToken as unknown as Patchable],
     ["resetLimit", PasswordResetLimit as unknown as Patchable],
+    ["loginIdentity", LoginIdentity as unknown as Patchable],
+    ["familyRoom", FamilyRoom as unknown as Patchable],
+    ["parentPoints", ParentPoints as unknown as Patchable],
+    ["parentVerification", ParentVerification as unknown as Patchable],
 ];
+const PARENT_ID = "507f1f77bcf86cd799439022";
 
 // Giả các model: ghi lại thứ tự xoá, khôi phục sau mỗi test
-const withMocks = async (user: unknown, run: (calls: string[]) => Promise<void>) => {
+const withMocks = async (user: unknown, run: (calls: string[]) => Promise<void>, parent: unknown = null) => {
     const calls: string[] = [];
     const originals = MODELS.map(([, model]) => model.deleteMany);
     const userModel = User as unknown as Patchable;
     const original = { findById: userModel.findById, deleteOne: userModel.deleteOne };
+    const parentModel = Parent as unknown as Patchable;
+    const parentOriginal = { findOne: parentModel.findOne, deleteOne: parentModel.deleteOne };
     MODELS.forEach(([name, model]) => {
         model.deleteMany = async () => calls.push(name);
     });
     userModel.findById = async (id: string) => (id === USER_ID ? user : null);
     userModel.deleteOne = async () => calls.push("user");
+    parentModel.findOne = () => ({ select: async () => parent });
+    parentModel.deleteOne = async () => calls.push("parent");
     try {
         await run(calls);
     } finally {
@@ -43,6 +57,7 @@ const withMocks = async (user: unknown, run: (calls: string[]) => Promise<void>)
             model.deleteMany = originals[index];
         });
         Object.assign(userModel, original);
+        Object.assign(parentModel, parentOriginal);
     }
 };
 
@@ -65,8 +80,21 @@ test("deleteAccount: revokes sessions first, removes every user collection, then
         await authService.deleteAccount(USER_ID, { password: PASSWORD });
         assert.equal(calls[0], "session");
         assert.equal(calls.at(-1), "user");
-        assert.deepEqual([...calls].sort(), ["gameSession", "numberSession", "progress", "resetLimit", "resetToken", "session", "user"]);
+        assert.deepEqual([...calls].sort(), ["familyRoom", "gameSession", "loginIdentity", "numberSession", "progress", "resetLimit", "resetToken", "session", "user"]);
     });
+});
+
+test("deleteAccount: also removes the linked parent account and its data", async () => {
+    const user = { _id: USER_ID, passwordHash: undefined };
+    await withMocks(user, async (calls) => {
+        await authService.deleteAccount(USER_ID, {});
+        assert.equal(calls[0], "session");
+        assert.equal(calls.at(-1), "user");
+        for (const name of ["parentPoints", "parentVerification", "parent"]) assert.ok(calls.includes(name), name);
+        assert.equal(calls.filter((name) => name === "session").length, 2);
+        assert.equal(calls.filter((name) => name === "loginIdentity").length, 2);
+        assert.ok(calls.indexOf("parent") < calls.indexOf("user"));
+    }, { _id: PARENT_ID });
 });
 
 test("deleteAccount: a Google account without a password needs no password", async () => {
