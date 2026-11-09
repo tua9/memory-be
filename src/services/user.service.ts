@@ -9,421 +9,409 @@ import { JwtProvider } from "../providers/JwtProvider";
 import ApiError from "../utils/ApiError";
 
 interface CredentialsBody {
-    email?: unknown;
-    password?: unknown;
-    username?: unknown;
-    rememberMe?: unknown;
+  email?: unknown;
+  password?: unknown;
+  username?: unknown;
+  rememberMe?: unknown;
 }
 
 interface UserInfo {
-    _id: string;
-    email: string;
-    username: string;
-    status: string;
-    role: string;
-    avatarUrl?: string | null;
-    authProvider?: string;
-    isEmailVerified?: boolean;
-    hasPassword?: boolean;
+  _id: string;
+  email: string;
+  username: string;
+  status: string;
+  role: string;
+  avatarUrl?: string | null;
+  authProvider?: string;
+  isEmailVerified?: boolean;
+  hasPassword?: boolean;
 }
 
 export interface AuthTokens {
-    accessToken: string;
-    refreshToken: string;
-    accessExpiresAt: Date;
-    refreshExpiresAt: Date;
-    // false: cookie chỉ sống đến khi đóng trình duyệt và phiên có thời hạn ngắn hơn
-    rememberMe: boolean;
-    userInfo: UserInfo;
+  accessToken: string;
+  refreshToken: string;
+  accessExpiresAt: Date;
+  refreshExpiresAt: Date;
+  // false: cookie chỉ sống đến khi đóng trình duyệt và phiên có thời hạn ngắn hơn
+  rememberMe: boolean;
+  userInfo: UserInfo;
 }
 
 const hashToken = (token: string): string =>
-    createHash("sha256").update(token).digest("hex");
+  createHash("sha256").update(token).digest("hex");
 
 const buildUserInfo = (user: UserDocument): UserInfo => ({
-    _id: user._id.toString(),
-    email: user.email,
-    username: user.username,
-    status: user.status,
-    role: user.role,
-    avatarUrl: user.avatarUrl ?? null,
-    authProvider: user.authProvider ?? "local",
-    isEmailVerified: user.isEmailVerified ?? false,
-    hasPassword: Boolean(user.passwordHash),
+  _id: user._id.toString(),
+  email: user.email,
+  username: user.username,
+  status: user.status,
+  role: user.role,
+  avatarUrl: user.avatarUrl ?? null,
+  authProvider: user.authProvider ?? "local",
+  isEmailVerified: user.isEmailVerified ?? false,
+  hasPassword: Boolean(user.passwordHash),
 });
 
 const asCredentials = (body: unknown): CredentialsBody =>
-    typeof body === "object" && body !== null ? (body as CredentialsBody) : {};
+  typeof body === "object" && body !== null ? (body as CredentialsBody) : {};
 
 const validateCredentials = (
-    body: unknown,
+  body: unknown,
 ): { email: string; password: string } => {
-    const { email, password } = asCredentials(body);
-    if (
-        typeof email !== "string" ||
-        !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())
-    ) {
-        throw new ApiError(
-            StatusCodes.BAD_REQUEST,
-            "A valid email is required",
-        );
-    }
-    if (
-        typeof password !== "string" ||
-        !password ||
-        Buffer.byteLength(password, "utf8") > 72
-    ) {
-        throw new ApiError(
-            StatusCodes.BAD_REQUEST,
-            "Password is required and must not exceed 72 bytes",
-        );
-    }
-    return { email: email.trim().toLowerCase(), password };
+  const { email, password } = asCredentials(body);
+  if (
+    typeof email !== "string" ||
+    !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())
+  ) {
+    throw new ApiError(StatusCodes.BAD_REQUEST, "A valid email is required");
+  }
+  if (
+    typeof password !== "string" ||
+    !password ||
+    Buffer.byteLength(password, "utf8") > 72
+  ) {
+    throw new ApiError(
+      StatusCodes.BAD_REQUEST,
+      "Password is required and must not exceed 72 bytes",
+    );
+  }
+  return { email: email.trim().toLowerCase(), password };
 };
 
 const ensureAccountCanSignIn = (user: UserDocument): void => {
-    if (user.status !== "active") {
-        throw new ApiError(StatusCodes.FORBIDDEN, "Account is not active");
-    }
+  if (user.status !== "active") {
+    throw new ApiError(StatusCodes.FORBIDDEN, "Account is not active");
+  }
 };
 
 const generateTokens = async (
-    user: UserDocument,
-    rememberMe: boolean,
+  user: UserDocument,
+  rememberMe: boolean,
 ): Promise<AuthTokens> => {
-    if (
-        !env.ACCESS_TOKEN_SECRET ||
-        !env.REFRESH_TOKEN_SECRET ||
-        env.ACCESS_TOKEN_SECRET === env.REFRESH_TOKEN_SECRET
-    ) {
-        throw new ApiError(
-            StatusCodes.INTERNAL_SERVER_ERROR,
-            "Distinct JWT secrets must be configured",
-        );
-    }
+  if (
+    !env.ACCESS_TOKEN_SECRET ||
+    !env.REFRESH_TOKEN_SECRET ||
+    env.ACCESS_TOKEN_SECRET === env.REFRESH_TOKEN_SECRET
+  ) {
+    throw new ApiError(
+      StatusCodes.INTERNAL_SERVER_ERROR,
+      "Distinct JWT secrets must be configured",
+    );
+  }
 
-    const subject = user._id.toString();
-    const accessToken = await JwtProvider.generateToken(
-        {
-            sub: subject,
-            role: user.role,
-            tokenType: "access",
-            jti: randomUUID(),
-        },
-        env.ACCESS_TOKEN_SECRET,
-        env.ACCESS_TOKEN_TTL as SignOptions["expiresIn"],
+  const subject = user._id.toString();
+  const accessToken = await JwtProvider.generateToken(
+    {
+      sub: subject,
+      role: user.role,
+      tokenType: "access",
+      jti: randomUUID(),
+    },
+    env.ACCESS_TOKEN_SECRET,
+    env.ACCESS_TOKEN_TTL as SignOptions["expiresIn"],
+  );
+  const refreshToken = await JwtProvider.generateToken(
+    { sub: subject, tokenType: "refresh", jti: randomUUID(), rememberMe },
+    env.REFRESH_TOKEN_SECRET,
+    (rememberMe
+      ? env.REFRESH_TOKEN_TTL
+      : env.REFRESH_TOKEN_TTL_NO_REMEMBER) as SignOptions["expiresIn"],
+  );
+  const accessPayload = await JwtProvider.verifyToken(
+    accessToken,
+    env.ACCESS_TOKEN_SECRET,
+  );
+  const refreshPayload = await JwtProvider.verifyToken(
+    refreshToken,
+    env.REFRESH_TOKEN_SECRET,
+  );
+  if (
+    typeof accessPayload.exp !== "number" ||
+    typeof refreshPayload.exp !== "number"
+  ) {
+    throw new ApiError(
+      StatusCodes.INTERNAL_SERVER_ERROR,
+      "Token expiration could not be determined",
     );
-    const refreshToken = await JwtProvider.generateToken(
-        // rememberMe nằm trong payload đã ký để refresh giữ đúng lựa chọn lúc đăng nhập
-        { sub: subject, tokenType: "refresh", jti: randomUUID(), rememberMe },
-        env.REFRESH_TOKEN_SECRET,
-        (rememberMe
-            ? env.REFRESH_TOKEN_TTL
-            : env.REFRESH_TOKEN_TTL_NO_REMEMBER) as SignOptions["expiresIn"],
-    );
-    const accessPayload = await JwtProvider.verifyToken(
-        accessToken,
-        env.ACCESS_TOKEN_SECRET,
-    );
-    const refreshPayload = await JwtProvider.verifyToken(
-        refreshToken,
-        env.REFRESH_TOKEN_SECRET,
-    );
-    if (
-        typeof accessPayload.exp !== "number" ||
-        typeof refreshPayload.exp !== "number"
-    ) {
-        throw new ApiError(
-            StatusCodes.INTERNAL_SERVER_ERROR,
-            "Token expiration could not be determined",
-        );
-    }
+  }
 
-    return {
-        accessToken,
-        refreshToken,
-        accessExpiresAt: new Date(accessPayload.exp * 1000),
-        refreshExpiresAt: new Date(refreshPayload.exp * 1000),
-        rememberMe,
-        userInfo: buildUserInfo(user),
-    };
+  return {
+    accessToken,
+    refreshToken,
+    accessExpiresAt: new Date(accessPayload.exp * 1000),
+    refreshExpiresAt: new Date(refreshPayload.exp * 1000),
+    rememberMe,
+    userInfo: buildUserInfo(user),
+  };
 };
 
 const signUp = async (body: unknown): Promise<UserInfo> => {
-    const { email, password } = validateCredentials(body);
-    const username = asCredentials(body).username;
-    const normalizedUserName =
-        typeof username === "string" ? username.trim() : "";
-    if (
-        normalizedUserName.length < 2 ||
-        normalizedUserName.length > 100 ||
-        password.length < 8
-    ) {
-        throw new ApiError(
-            StatusCodes.BAD_REQUEST,
-            "User name must be 2-100 characters and password at least 8 characters",
-        );
-    }
-    if (await User.findOne({ email })) {
-        throw new ApiError(StatusCodes.CONFLICT, "Email already exists");
-    }
+  const { email, password } = validateCredentials(body);
+  const username = asCredentials(body).username;
+  const normalizedUserName =
+    typeof username === "string" ? username.trim() : "";
+  if (
+    normalizedUserName.length < 2 ||
+    normalizedUserName.length > 100 ||
+    password.length < 8
+  ) {
+    throw new ApiError(
+      StatusCodes.BAD_REQUEST,
+      "User name must be 2-100 characters and password at least 8 characters",
+    );
+  }
+  if (await User.findOne({ email })) {
+    throw new ApiError(StatusCodes.CONFLICT, "Email already exists");
+  }
 
-    const passwordHash = await bcrypt.hash(password, 10);
-    try {
-        const user = await User.create({
-            email,
-            username: normalizedUserName,
-            passwordHash,
-            role: "user",
-            status: "active",
-        });
-        return buildUserInfo(user);
-    } catch (error) {
-        if ((error as { code?: number }).code === 11000) {
-            throw new ApiError(StatusCodes.CONFLICT, "Email already exists");
-        }
-        throw error;
+  const passwordHash = await bcrypt.hash(password, 10);
+  try {
+    const user = await User.create({
+      email,
+      username: normalizedUserName,
+      passwordHash,
+      role: "user",
+      status: "active",
+    });
+    return buildUserInfo(user);
+  } catch (error) {
+    if ((error as { code?: number }).code === 11000) {
+      throw new ApiError(StatusCodes.CONFLICT, "Email already exists");
     }
+    throw error;
+  }
 };
 
 const signIn = async (body: unknown): Promise<AuthTokens> => {
-    const { email, password } = validateCredentials(body);
-    const user = await User.findOne({ email });
+  const { email, password } = validateCredentials(body);
+  const user = await User.findOne({ email });
 
-    if (
-        !user?.passwordHash ||
-        !(await bcrypt.compare(password, user.passwordHash))
-    ) {
-        throw new ApiError(
-            StatusCodes.UNAUTHORIZED,
-            "Invalid email or password",
-        );
-    }
+  if (
+    !user?.passwordHash ||
+    !(await bcrypt.compare(password, user.passwordHash))
+  ) {
+    throw new ApiError(StatusCodes.UNAUTHORIZED, "Invalid email or password");
+  }
 
-    ensureAccountCanSignIn(user);
+  ensureAccountCanSignIn(user);
 
-    const rememberMe = asCredentials(body).rememberMe === true;
-    const tokens = await generateTokens(user, rememberMe);
+  const rememberMe = asCredentials(body).rememberMe === true;
+  const tokens = await generateTokens(user, rememberMe);
 
-    await Session.create({
-        userId: user._id,
-        refreshToken: hashToken(tokens.refreshToken),
-        expiresAt: tokens.refreshExpiresAt,
-    });
+  await Session.create({
+    userId: user._id,
+    refreshToken: hashToken(tokens.refreshToken),
+    expiresAt: tokens.refreshExpiresAt,
+  });
 
-    return tokens;
+  return tokens;
 };
 
 const refreshToken = async (token: unknown): Promise<AuthTokens> => {
-    if (typeof token !== "string" || !token) {
-        throw new ApiError(
-            StatusCodes.UNAUTHORIZED,
-            "Refresh token is required",
-        );
-    }
+  if (typeof token !== "string" || !token) {
+    throw new ApiError(StatusCodes.UNAUTHORIZED, "Refresh token is required");
+  }
 
-    let payload: JwtPayload;
-    try {
-        payload = await JwtProvider.verifyToken(
-            token,
-            env.REFRESH_TOKEN_SECRET,
-        );
-    } catch (error) {
-        if (
-            error instanceof Error &&
-            [
-                "TokenExpiredError",
-                "JsonWebTokenError",
-                "NotBeforeError",
-            ].includes(error.name)
-        ) {
-            throw new ApiError(
-                StatusCodes.UNAUTHORIZED,
-                "Invalid or expired refresh token",
-            );
-        }
-        throw error;
-    }
+  let payload: JwtPayload;
+  try {
+    payload = await JwtProvider.verifyToken(token, env.REFRESH_TOKEN_SECRET);
+  } catch (error) {
     if (
-        payload.tokenType !== "refresh" ||
-        typeof payload.sub !== "string" ||
-        !/^[a-f\d]{24}$/i.test(payload.sub)
+      error instanceof Error &&
+      ["TokenExpiredError", "JsonWebTokenError", "NotBeforeError"].includes(
+        error.name,
+      )
     ) {
-        throw new ApiError(StatusCodes.UNAUTHORIZED, "Invalid refresh token");
+      throw new ApiError(
+        StatusCodes.UNAUTHORIZED,
+        "Invalid or expired refresh token",
+      );
     }
+    throw error;
+  }
+  if (
+    payload.tokenType !== "refresh" ||
+    typeof payload.sub !== "string" ||
+    !/^[a-f\d]{24}$/i.test(payload.sub)
+  ) {
+    throw new ApiError(StatusCodes.UNAUTHORIZED, "Invalid refresh token");
+  }
 
-    const user = await User.findById(payload.sub);
-    if (!user) {
-        throw new ApiError(StatusCodes.UNAUTHORIZED, "Account is unavailable");
-    }
-    ensureAccountCanSignIn(user);
-    // Token cấp trước khi có rememberMe không có trường này: giữ hành vi cũ là duy trì đăng nhập
-    const tokens = await generateTokens(user, payload.rememberMe !== false);
-    const session = await Session.findOneAndUpdate(
-        {
-            userId: user._id,
-            refreshToken: hashToken(token),
-            expiresAt: { $gt: new Date() },
-        },
-        { $set: { refreshToken: hashToken(tokens.refreshToken) } },
-        { new: true, runValidators: true },
-    );
-    if (!session) {
-        throw new ApiError(
-            StatusCodes.UNAUTHORIZED,
-            "Session expired or revoked",
-        );
-    }
-    return tokens;
+  const user = await User.findById(payload.sub);
+  if (!user) {
+    throw new ApiError(StatusCodes.UNAUTHORIZED, "Account is unavailable");
+  }
+  ensureAccountCanSignIn(user);
+  // Token cấp trước khi có rememberMe không có trường này: giữ hành vi cũ là duy trì đăng nhập
+  const tokens = await generateTokens(user, payload.rememberMe !== false);
+  const session = await Session.findOneAndUpdate(
+    {
+      userId: user._id,
+      refreshToken: hashToken(token),
+      expiresAt: { $gt: new Date() },
+    },
+    { $set: { refreshToken: hashToken(tokens.refreshToken) } },
+    { new: true, runValidators: true },
+  );
+  if (!session) {
+    throw new ApiError(StatusCodes.UNAUTHORIZED, "Session expired or revoked");
+  }
+  return tokens;
 };
 
 const signOut = async (token?: unknown): Promise<void> => {
-    if (typeof token === "string" && token) {
-        await Session.deleteOne({ refreshToken: hashToken(token) });
-    }
+  if (typeof token === "string" && token) {
+    await Session.deleteOne({ refreshToken: hashToken(token) });
+  }
 };
 
 interface GoogleProfile {
-    sub: string;
-    email: string;
-    email_verified: boolean;
-    name?: string;
-    picture?: string;
+  sub: string;
+  email: string;
+  email_verified: boolean;
+  name?: string;
+  picture?: string;
 }
 
 const googleSignIn = async (token: unknown): Promise<AuthTokens> => {
-    if (typeof token !== "string" || !token.trim()) {
-        throw new ApiError(StatusCodes.BAD_REQUEST, "Google token is required");
+  if (typeof token !== "string" || !token.trim()) {
+    throw new ApiError(StatusCodes.BAD_REQUEST, "Google token is required");
+  }
+
+  let profile: GoogleProfile;
+  try {
+    const response = await fetch(
+      "https://www.googleapis.com/oauth2/v3/userinfo",
+      {
+        headers: { Authorization: `Bearer ${token}` },
+      },
+    );
+
+    if (!response.ok) {
+      throw new ApiError(
+        StatusCodes.UNAUTHORIZED,
+        "Google token is invalid or expired",
+      );
     }
 
-    let profile: GoogleProfile;
-    try {
-        const response = await fetch("https://www.googleapis.com/oauth2/v3/userinfo", {
-            headers: { Authorization: `Bearer ${token}` },
-        });
+    profile = (await response.json()) as GoogleProfile;
+  } catch (error) {
+    if (error instanceof ApiError) throw error;
+    throw new ApiError(
+      StatusCodes.UNAUTHORIZED,
+      "Failed to authenticate with Google",
+    );
+  }
 
-        if (!response.ok) {
-            throw new ApiError(
-                StatusCodes.UNAUTHORIZED,
-                "Google token is invalid or expired",
-            );
-        }
+  if (!profile.email_verified) {
+    throw new ApiError(
+      StatusCodes.UNAUTHORIZED,
+      "Google email is not verified",
+    );
+  }
 
-        profile = (await response.json()) as GoogleProfile;
-    } catch (error) {
-        if (error instanceof ApiError) throw error;
-        throw new ApiError(
-            StatusCodes.UNAUTHORIZED,
-            "Failed to authenticate with Google",
-        );
+  const normalizedEmail = profile.email.trim().toLowerCase();
+  const googleId = profile.sub;
+
+  let user = await User.findOne({
+    $or: [{ googleId }, { email: normalizedEmail }],
+  });
+
+  if (user) {
+    ensureAccountCanSignIn(user);
+    let hasChanges = false;
+
+    if (!user.googleId) {
+      user.googleId = googleId;
+      user.isEmailVerified = true;
+      hasChanges = true;
+    }
+    if (!user.avatarUrl && profile.picture) {
+      user.avatarUrl = profile.picture;
+      hasChanges = true;
+    }
+    if (!user.isEmailVerified) {
+      user.isEmailVerified = true;
+      hasChanges = true;
     }
 
-    if (!profile.email_verified) {
-        throw new ApiError(
-            StatusCodes.UNAUTHORIZED,
-            "Google email is not verified",
-        );
+    if (hasChanges) {
+      await user.save();
     }
-
-    const normalizedEmail = profile.email.trim().toLowerCase();
-    const googleId = profile.sub;
-
-    let user = await User.findOne({
-        $or: [{ googleId }, { email: normalizedEmail }],
+  } else {
+    user = await User.create({
+      username: profile.name?.trim() || normalizedEmail.split("@")[0],
+      email: normalizedEmail,
+      googleId,
+      avatarUrl: profile.picture || null,
+      authProvider: "google",
+      isEmailVerified: true,
+      status: "active",
+      role: "user",
+      passwordHash: null,
     });
+  }
 
-    if (user) {
-        ensureAccountCanSignIn(user);
-        let hasChanges = false;
+  const tokens = await generateTokens(user, true);
 
-        if (!user.googleId) {
-            user.googleId = googleId;
-            user.isEmailVerified = true;
-            hasChanges = true;
-        }
-        if (!user.avatarUrl && profile.picture) {
-            user.avatarUrl = profile.picture;
-            hasChanges = true;
-        }
-        if (!user.isEmailVerified) {
-            user.isEmailVerified = true;
-            hasChanges = true;
-        }
+  await Session.create({
+    userId: user._id,
+    refreshToken: hashToken(tokens.refreshToken),
+    expiresAt: tokens.refreshExpiresAt,
+  });
 
-        if (hasChanges) {
-            await user.save();
-        }
-    } else {
-        user = await User.create({
-            username: profile.name?.trim() || normalizedEmail.split("@")[0],
-            email: normalizedEmail,
-            googleId,
-            avatarUrl: profile.picture || null,
-            authProvider: "google",
-            isEmailVerified: true,
-            status: "active",
-            role: "user",
-            passwordHash: null,
-        });
-    }
-
-    const tokens = await generateTokens(user, true);
-
-    await Session.create({
-        userId: user._id,
-        refreshToken: hashToken(tokens.refreshToken),
-        expiresAt: tokens.refreshExpiresAt,
-    });
-
-    return tokens;
+  return tokens;
 };
 
 const setPassword = async (userId: string, body: unknown): Promise<void> => {
-    const data = typeof body === "object" && body !== null ? (body as Record<string, unknown>) : {};
-    const { currentPassword, newPassword } = data;
+  const data =
+    typeof body === "object" && body !== null
+      ? (body as Record<string, unknown>)
+      : {};
+  const { currentPassword, newPassword } = data;
 
-    if (
-        typeof newPassword !== "string" ||
-        newPassword.length < 8 ||
-        Buffer.byteLength(newPassword, "utf8") > 72
-    ) {
-        throw new ApiError(
-            StatusCodes.BAD_REQUEST,
-            "Password must be at least 8 characters and not exceed 72 bytes",
-        );
+  if (
+    typeof newPassword !== "string" ||
+    newPassword.length < 8 ||
+    Buffer.byteLength(newPassword, "utf8") > 72
+  ) {
+    throw new ApiError(
+      StatusCodes.BAD_REQUEST,
+      "Password must be at least 8 characters and not exceed 72 bytes",
+    );
+  }
+
+  const user = await User.findById(userId);
+  if (!user) {
+    throw new ApiError(StatusCodes.NOT_FOUND, "User not found");
+  }
+
+  // Nếu tài khoản đã có mật khẩu, yêu cầu và xác thực mật khẩu hiện tại
+  if (user.passwordHash) {
+    if (typeof currentPassword !== "string" || !currentPassword) {
+      throw new ApiError(
+        StatusCodes.BAD_REQUEST,
+        "Current password is required",
+      );
     }
-
-    const user = await User.findById(userId);
-    if (!user) {
-        throw new ApiError(StatusCodes.NOT_FOUND, "User not found");
+    const isMatch = await bcrypt.compare(currentPassword, user.passwordHash);
+    if (!isMatch) {
+      throw new ApiError(
+        StatusCodes.BAD_REQUEST,
+        "Current password is incorrect",
+      );
     }
+  }
 
-    // Nếu tài khoản đã có mật khẩu, yêu cầu và xác thực mật khẩu hiện tại
-    if (user.passwordHash) {
-        if (typeof currentPassword !== "string" || !currentPassword) {
-            throw new ApiError(
-                StatusCodes.BAD_REQUEST,
-                "Current password is required",
-            );
-        }
-        const isMatch = await bcrypt.compare(currentPassword, user.passwordHash);
-        if (!isMatch) {
-            throw new ApiError(
-                StatusCodes.BAD_REQUEST,
-                "Current password is incorrect",
-            );
-        }
-    }
-
-    user.passwordHash = await bcrypt.hash(newPassword, 10);
-    await user.save();
+  user.passwordHash = await bcrypt.hash(newPassword, 10);
+  await user.save();
 };
 
 export const authService = {
-    signUp,
-    signIn,
-    signOut,
-    refreshToken,
-    googleSignIn,
-    setPassword,
+  signUp,
+  signIn,
+  signOut,
+  refreshToken,
+  googleSignIn,
+  setPassword,
 };
