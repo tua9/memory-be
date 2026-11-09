@@ -1,5 +1,5 @@
 import mongoose, { type Document, type Types } from "mongoose";
-import { PASSWORD_RESET_PURPOSE, type PasswordResetPurpose } from "../config/passwordReset.js";
+import { PASSWORD_RESET_PURPOSE, PARENT_PASSWORD_RESET_PURPOSE, type PasswordResetPurpose } from "../config/passwordReset.js";
 
 export interface PasswordResetLimitDocument extends Document {
     userId: Types.ObjectId;
@@ -13,7 +13,7 @@ export interface PasswordResetLimitDocument extends Document {
 
 const passwordResetLimitSchema = new mongoose.Schema<PasswordResetLimitDocument>({
     userId: { type: mongoose.Schema.Types.ObjectId, ref: "user", required: true },
-    purpose: { type: String, enum: [PASSWORD_RESET_PURPOSE], required: true },
+    purpose: { type: String, enum: [PASSWORD_RESET_PURPOSE, PARENT_PASSWORD_RESET_PURPOSE], required: true },
     windowStartedAt: { type: Date, required: true },
     count: { type: Number, required: true, min: 0 },
     lastSentAt: { type: Date, required: true },

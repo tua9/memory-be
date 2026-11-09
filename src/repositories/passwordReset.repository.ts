@@ -2,8 +2,10 @@ import PasswordResetLimit from "../models/passwordResetLimit.js";
 import PasswordResetToken from "../models/passwordResetToken.js";
 import Session from "../models/sessions.js";
 import User from "../models/user.js";
+import Parent from "../models/parent.js";
 import {
     PASSWORD_RESET_PURPOSE,
+    PARENT_PASSWORD_RESET_PURPOSE,
     PASSWORD_RESET_WINDOW_MS,
 } from "../config/passwordReset.js";
 
@@ -55,19 +57,31 @@ const expiresAtFor = (state: SendLimitState): Date =>
 
 const isDuplicateKey = (error: unknown): boolean => (error as { code?: number }).code === 11000;
 
-export const mongoPasswordResetRepository: PasswordResetRepository = {
+export const createMongoPasswordResetRepository = (kind: "user" | "parent"): PasswordResetRepository => {
+const purpose = kind === "parent" ? PARENT_PASSWORD_RESET_PURPOSE : PASSWORD_RESET_PURPOSE;
+return {
     findAccount: async (userId) => {
+        if (kind === "parent") {
+            const parent = await Parent.findById(userId).select("email passwordHash").lean();
+            return parent ? { id: parent._id.toString(), email: parent.email, status: "active", passwordHash: parent.passwordHash } : null;
+        }
         const user = await User.findById(userId).select("email status passwordHash").lean();
         return user ? { id: user._id.toString(), email: user.email, status: user.status, passwordHash: user.passwordHash } : null;
     },
 
     findAccountByEmail: async (email) => {
+        if (kind === "parent") {
+            // Do not choose an account type by query order if legacy data contain an overlap.
+            if (await User.exists({ email })) return null;
+            const parent = await Parent.findOne({ email }).select("email passwordHash").lean();
+            return parent ? { id: parent._id.toString(), email: parent.email, status: "active", passwordHash: parent.passwordHash } : null;
+        }
         const user = await User.findOne({ email }).select("email status passwordHash").lean();
         return user ? { id: user._id.toString(), email: user.email, status: user.status, passwordHash: user.passwordHash } : null;
     },
 
     getSendLimit: async (userId) => {
-        const doc = await PasswordResetLimit.findOne({ userId, purpose: PASSWORD_RESET_PURPOSE }).lean();
+        const doc = await PasswordResetLimit.findOne({ userId, purpose }).lean();
         return doc ? toLimit(doc) : null;
     },
 
@@ -75,7 +89,7 @@ export const mongoPasswordResetRepository: PasswordResetRepository = {
         const fields = { ...next, expiresAt: expiresAtFor(next) };
         if (!expected) {
             try {
-                await PasswordResetLimit.create({ userId, purpose: PASSWORD_RESET_PURPOSE, ...fields });
+                await PasswordResetLimit.create({ userId, purpose, ...fields });
                 return true;
             } catch (error) {
                 // Request khác vừa tạo bản ghi trước: coi như đã có người giữ chỗ
@@ -86,7 +100,7 @@ export const mongoPasswordResetRepository: PasswordResetRepository = {
         const updated = await PasswordResetLimit.findOneAndUpdate(
             {
                 userId,
-                purpose: PASSWORD_RESET_PURPOSE,
+                purpose,
                 windowStartedAt: expected.windowStartedAt,
                 count: expected.count,
                 lastSentAt: expected.lastSentAt,
@@ -98,11 +112,11 @@ export const mongoPasswordResetRepository: PasswordResetRepository = {
 
     restoreSendLimit: async (userId, previous) => {
         if (!previous) {
-            await PasswordResetLimit.deleteOne({ userId, purpose: PASSWORD_RESET_PURPOSE });
+            await PasswordResetLimit.deleteOne({ userId, purpose });
             return;
         }
         await PasswordResetLimit.updateOne(
-            { userId, purpose: PASSWORD_RESET_PURPOSE },
+            { userId, purpose },
             { $set: { ...previous, expiresAt: expiresAtFor(previous) } },
         );
     },
@@ -110,7 +124,7 @@ export const mongoPasswordResetRepository: PasswordResetRepository = {
     createToken: async ({ userId, tokenHash, expiresAt }) => {
         const doc = await PasswordResetToken.create({
             userId,
-            purpose: PASSWORD_RESET_PURPOSE,
+            purpose,
             tokenHash,
             expiresAt,
             usedAt: null,
@@ -123,17 +137,17 @@ export const mongoPasswordResetRepository: PasswordResetRepository = {
     },
 
     deleteTokensExcept: async (userId, keepId) => {
-        await PasswordResetToken.deleteMany({ userId, purpose: PASSWORD_RESET_PURPOSE, _id: { $ne: keepId } });
+        await PasswordResetToken.deleteMany({ userId, purpose, _id: { $ne: keepId } });
     },
 
     deleteAllTokens: async (userId) => {
-        await PasswordResetToken.deleteMany({ userId, purpose: PASSWORD_RESET_PURPOSE });
+        await PasswordResetToken.deleteMany({ userId, purpose });
     },
 
     findActiveToken: async (tokenHash, now) => {
         const doc = await PasswordResetToken.findOne({
             tokenHash,
-            purpose: PASSWORD_RESET_PURPOSE,
+            purpose,
             usedAt: null,
             expiresAt: { $gt: now },
         }).lean();
@@ -142,7 +156,7 @@ export const mongoPasswordResetRepository: PasswordResetRepository = {
 
     claimToken: async (tokenHash, now) => {
         const doc = await PasswordResetToken.findOneAndUpdate(
-            { tokenHash, purpose: PASSWORD_RESET_PURPOSE, usedAt: null, expiresAt: { $gt: now } },
+            { tokenHash, purpose, usedAt: null, expiresAt: { $gt: now } },
             { $set: { usedAt: now } },
         ).lean();
         return doc ? { id: doc._id.toString(), userId: doc.userId.toString() } : null;
@@ -153,12 +167,18 @@ export const mongoPasswordResetRepository: PasswordResetRepository = {
     },
 
     updatePasswordHash: async (userId, passwordHash) => {
-        const result = await User.updateOne({ _id: userId }, { $set: { passwordHash } });
+        const result = kind === "parent"
+            ? await Parent.updateOne({ _id: userId }, { $set: { passwordHash } })
+            : await User.updateOne({ _id: userId }, { $set: { passwordHash } });
         return result.matchedCount === 1;
     },
 
     revokeSessions: async (userId) => {
-        await Session.deleteMany({ userId });
+        await Session.deleteMany(kind === "parent" ? { parentId: userId } : { userId });
     },
 };
+};
+
+export const mongoPasswordResetRepository = createMongoPasswordResetRepository("user");
+export const mongoParentPasswordResetRepository = createMongoPasswordResetRepository("parent");
 

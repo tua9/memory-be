@@ -1,10 +1,13 @@
 import bcrypt from "bcrypt";
 import { createHash, randomUUID } from "node:crypto";
 import { StatusCodes } from "http-status-codes";
+import { Types } from "mongoose";
 import type { JwtPayload, SignOptions } from "jsonwebtoken";
 import { env } from "../config/env";
 import User, { type UserDocument } from "../models/user";
 import Session from "../models/sessions";
+import Parent, { type ParentDocument } from "../models/parent.js";
+import { confirmLoginEmail, releaseLoginEmail, reserveLoginEmail } from "./loginIdentity.service.js";
 import { JwtProvider } from "../providers/JwtProvider";
 import ApiError from "../utils/ApiError";
 import { assertValidNewPassword } from "../utils/password";
@@ -17,7 +20,7 @@ interface CredentialsBody {
     rememberMe?: unknown;
 }
 
-interface UserInfo {
+export interface UserInfo {
     _id: string;
     email: string;
     username: string;
@@ -42,7 +45,17 @@ export interface AuthTokens {
 const hashToken = (token: string): string =>
     createHash("sha256").update(token).digest("hex");
 
-const buildUserInfo = (user: UserDocument): UserInfo => ({
+const buildUserInfo = (user: UserDocument | ParentDocument): UserInfo => "childUserId" in user ? ({
+    _id: user._id.toString(),
+    email: user.email,
+    username: user.fullname,
+    status: "active",
+    role: "parent",
+    avatarUrl: null,
+    authProvider: "local",
+    isEmailVerified: Boolean(user.emailVerifiedAt),
+    hasPassword: true,
+}) : ({
     _id: user._id.toString(),
     email: user.email,
     username: user.username,
@@ -90,7 +103,7 @@ const ensureAccountCanSignIn = (user: UserDocument): void => {
 };
 
 const generateTokens = async (
-    user: UserDocument,
+    user: UserDocument | ParentDocument,
     rememberMe: boolean,
 ): Promise<AuthTokens> => {
     if (
@@ -105,10 +118,12 @@ const generateTokens = async (
     }
 
     const subject = user._id.toString();
+    const accountType = "childUserId" in user ? "parent" : "user";
     const accessToken = await JwtProvider.generateToken(
         {
             sub: subject,
-            role: user.role,
+            role: accountType === "parent" ? "parent" : (user as UserDocument).role,
+            accountType,
             tokenType: "access",
             jti: randomUUID(),
         },
@@ -117,7 +132,7 @@ const generateTokens = async (
     );
     const refreshToken = await JwtProvider.generateToken(
         // rememberMe nằm trong payload đã ký để refresh giữ đúng lựa chọn lúc đăng nhập
-        { sub: subject, tokenType: "refresh", jti: randomUUID(), rememberMe },
+        { sub: subject, accountType, tokenType: "refresh", jti: randomUUID(), rememberMe },
         env.REFRESH_TOKEN_SECRET,
         (rememberMe
             ? env.REFRESH_TOKEN_TTL
@@ -166,35 +181,39 @@ const signUp = async (body: unknown): Promise<UserInfo> => {
             "User name must be 2-100 characters and password at least 8 characters",
         );
     }
-    if (await User.findOne({ email })) {
-        throw new ApiError(StatusCodes.CONFLICT, "Email already exists");
-    }
-
     const passwordHash = await bcrypt.hash(password, 10);
+    const accountId = new Types.ObjectId();
+    await reserveLoginEmail(email, "user", accountId);
+    let user: UserDocument;
     try {
-        const user = await User.create({
+        user = await User.create({
+            _id: accountId,
             email,
             username: normalizedUserName,
             passwordHash,
             role: "user",
             status: "active",
         });
-        return buildUserInfo(user);
     } catch (error) {
+        await releaseLoginEmail(email, accountId);
         if ((error as { code?: number }).code === 11000) {
             throw new ApiError(StatusCodes.CONFLICT, "Email already exists");
         }
         throw error;
     }
+    await confirmLoginEmail(email, accountId).catch(() => undefined);
+    return buildUserInfo(user);
 };
 
 const signIn = async (body: unknown): Promise<AuthTokens> => {
     const { email, password } = validateCredentials(body);
-    const user = await User.findOne({ email });
+    const [user, parent] = await Promise.all([User.findOne({ email }), Parent.findOne({ email })]);
+    if (user && parent) throw new ApiError(StatusCodes.CONFLICT, "Ambiguous login identity");
+    const account = user ?? parent;
 
     if (
-        !user?.passwordHash ||
-        !(await bcrypt.compare(password, user.passwordHash))
+        !account?.passwordHash ||
+        !(await bcrypt.compare(password, account.passwordHash))
     ) {
         throw new ApiError(
             StatusCodes.UNAUTHORIZED,
@@ -202,13 +221,14 @@ const signIn = async (body: unknown): Promise<AuthTokens> => {
         );
     }
 
-    ensureAccountCanSignIn(user);
+    if (user) ensureAccountCanSignIn(user);
 
     const rememberMe = asCredentials(body).rememberMe === true;
-    const tokens = await generateTokens(user, rememberMe);
+    const tokens = await generateTokens(account, rememberMe);
 
     await Session.create({
-        userId: user._id,
+        ...(user ? { userId: user._id } : { parentId: parent?._id }),
+        accountType: user ? "user" : "parent",
         refreshToken: hashToken(tokens.refreshToken),
         expiresAt: tokens.refreshExpiresAt,
     });
@@ -254,16 +274,17 @@ const refreshToken = async (token: unknown): Promise<AuthTokens> => {
         throw new ApiError(StatusCodes.UNAUTHORIZED, "Invalid refresh token");
     }
 
-    const user = await User.findById(payload.sub);
-    if (!user) {
+    const accountType = payload.accountType === "parent" ? "parent" : "user";
+    const account = accountType === "parent" ? await Parent.findById(payload.sub) : await User.findById(payload.sub);
+    if (!account) {
         throw new ApiError(StatusCodes.UNAUTHORIZED, "Account is unavailable");
     }
-    ensureAccountCanSignIn(user);
+    if (accountType === "user") ensureAccountCanSignIn(account as UserDocument);
     // Token cấp trước khi có rememberMe không có trường này: giữ hành vi cũ là duy trì đăng nhập
-    const tokens = await generateTokens(user, payload.rememberMe !== false);
+    const tokens = await generateTokens(account, payload.rememberMe !== false);
     const session = await Session.findOneAndUpdate(
         {
-            userId: user._id,
+            ...(accountType === "parent" ? { parentId: account._id } : { userId: account._id }),
             refreshToken: hashToken(token),
             expiresAt: { $gt: new Date() },
         },
@@ -397,6 +418,10 @@ const signInWithGoogleProfile = async (profile: GoogleProfile): Promise<AuthToke
     const normalizedEmail = profile.email.trim().toLowerCase();
     const googleId = profile.sub;
 
+    if (await Parent.exists({ email: normalizedEmail })) {
+        throw new ApiError(StatusCodes.CONFLICT, "Email already belongs to another account");
+    }
+
     let user = await User.findOne({
         $or: [{ googleId }, { email: normalizedEmail }],
     });
@@ -423,23 +448,33 @@ const signInWithGoogleProfile = async (profile: GoogleProfile): Promise<AuthToke
             await user.save();
         }
     } else {
-        user = await User.create({
-            username: profile.name?.trim() || normalizedEmail.split("@")[0],
-            email: normalizedEmail,
-            googleId,
-            avatarUrl: profile.picture || null,
-            authProvider: "google",
-            isEmailVerified: true,
-            status: "active",
-            role: "user",
-            passwordHash: null,
-        });
+        const accountId = new Types.ObjectId();
+        await reserveLoginEmail(normalizedEmail, "user", accountId);
+        try {
+            user = await User.create({
+                _id: accountId,
+                username: profile.name?.trim() || normalizedEmail.split("@")[0],
+                email: normalizedEmail,
+                googleId,
+                avatarUrl: profile.picture || null,
+                authProvider: "google",
+                isEmailVerified: true,
+                status: "active",
+                role: "user",
+                passwordHash: null,
+            });
+        } catch (error) {
+            await releaseLoginEmail(normalizedEmail, accountId);
+            throw error;
+        }
+        await confirmLoginEmail(normalizedEmail, accountId).catch(() => undefined);
     }
 
     const tokens = await generateTokens(user, true);
 
     await Session.create({
         userId: user._id,
+        accountType: "user",
         refreshToken: hashToken(tokens.refreshToken),
         expiresAt: tokens.refreshExpiresAt,
     });
