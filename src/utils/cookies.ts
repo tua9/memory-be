@@ -5,7 +5,7 @@ import { env } from "../config/env.js";
 // Cookie httpOnly dùng chung cho phiên đăng nhập và định danh khách
 export const baseCookieOptions: CookieOptions = {
   httpOnly: true,
-  secure: env.IS_PRODUCTION,
+  secure: true,
   sameSite: "none",
   path: "/",
 };
