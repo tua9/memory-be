@@ -5,6 +5,11 @@ import type { JwtPayload, SignOptions } from "jsonwebtoken";
 import { env } from "../config/env";
 import User, { type UserDocument } from "../models/user";
 import Session from "../models/sessions";
+import GameSession from "../models/gameSession";
+import NumberSession from "../models/numberSession";
+import UserGameProgress from "../models/userGameProgress";
+import PasswordResetToken from "../models/passwordResetToken";
+import PasswordResetLimit from "../models/passwordResetLimit";
 import { JwtProvider } from "../providers/JwtProvider";
 import ApiError from "../utils/ApiError";
 import { assertValidNewPassword } from "../utils/password";
@@ -267,7 +272,8 @@ const refreshToken = async (token: unknown): Promise<AuthTokens> => {
             refreshToken: hashToken(token),
             expiresAt: { $gt: new Date() },
         },
-        { $set: { refreshToken: hashToken(tokens.refreshToken) } },
+        // Gia hạn phiên theo token mới (phiên trượt): người dùng thường xuyên không bị đăng xuất sau 14 ngày kể từ lúc đăng nhập
+        { $set: { refreshToken: hashToken(tokens.refreshToken), expiresAt: tokens.refreshExpiresAt } },
         { new: true, runValidators: true },
     );
     if (!session) {
@@ -505,6 +511,35 @@ const changePassword = async (
     await Session.deleteMany({ userId: user._id });
 };
 
+// Xoá tài khoản và mọi dữ liệu gắn với nó (App Store/Google Play yêu cầu app có chức năng này).
+// Tài khoản có mật khẩu phải nhập lại mật khẩu; tài khoản Google chưa đặt mật khẩu chỉ cần đang đăng nhập.
+// Thu hồi phiên trước, xoá user sau cùng: lỗi giữa chừng chỉ để lại dữ liệu mồ côi, không để tài khoản mất dở.
+const deleteAccount = async (userId: string, body: unknown): Promise<void> => {
+    const password = (typeof body === "object" && body !== null ? (body as Record<string, unknown>) : {}).password;
+    const user = await User.findById(userId);
+    if (!user) {
+        throw new ApiError(StatusCodes.NOT_FOUND, "User not found");
+    }
+    if (user.passwordHash) {
+        if (typeof password !== "string" || !password) {
+            throw new ApiError(StatusCodes.BAD_REQUEST, "Vui lòng nhập mật khẩu để xác nhận", [{ field: "password" }]);
+        }
+        if (!(await bcrypt.compare(password, user.passwordHash))) {
+            throw new ApiError(StatusCodes.BAD_REQUEST, "Mật khẩu không chính xác", [{ field: "password" }]);
+        }
+    }
+
+    await Session.deleteMany({ userId: user._id });
+    await Promise.all([
+        GameSession.deleteMany({ userId: user._id }),
+        NumberSession.deleteMany({ userId: user._id }),
+        UserGameProgress.deleteMany({ userId: user._id }),
+        PasswordResetToken.deleteMany({ userId: user._id }),
+        PasswordResetLimit.deleteMany({ userId: user._id }),
+    ]);
+    await User.deleteOne({ _id: user._id });
+};
+
 export const authService = {
     signUp,
     signIn,
@@ -513,4 +548,5 @@ export const authService = {
     googleSignIn,
     googleSignInWithIdToken,
     changePassword,
+    deleteAccount,
 };

@@ -102,6 +102,19 @@ export const googleAuth: RequestHandler = asyncHandler(async (request, response)
     sendSession(request, response, tokens, "Google sign in successful");
 });
 
+export const deleteAccount: RequestHandler = asyncHandler(async (request, response) => {
+    const user = request.user;
+    if (!user) {
+        throw new ApiError(StatusCodes.UNAUTHORIZED, "Unauthorized");
+    }
+    await authService.deleteAccount(user._id.toString(), request.body);
+    clearAuthCookies(response);
+    response.status(StatusCodes.OK).json({
+        status: "success",
+        message: "Đã xoá tài khoản và toàn bộ dữ liệu.",
+    });
+});
+
 export const changePassword: RequestHandler = asyncHandler(async (request, response) => {
     const user = request.user;
     if (!user) {
