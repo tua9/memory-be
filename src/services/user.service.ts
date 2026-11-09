@@ -14,10 +14,10 @@ import { assertValidNewPassword } from "../utils/password";
 import { PASSWORD_RESET_ERROR_CODES } from "../config/passwordReset";
 
 interface CredentialsBody {
-    email?: unknown;
-    password?: unknown;
-    username?: unknown;
-    rememberMe?: unknown;
+  email?: unknown;
+  password?: unknown;
+  username?: unknown;
+  rememberMe?: unknown;
 }
 
 export interface UserInfo {
@@ -33,17 +33,17 @@ export interface UserInfo {
 }
 
 export interface AuthTokens {
-    accessToken: string;
-    refreshToken: string;
-    accessExpiresAt: Date;
-    refreshExpiresAt: Date;
-    // false: cookie chỉ sống đến khi đóng trình duyệt và phiên có thời hạn ngắn hơn
-    rememberMe: boolean;
-    userInfo: UserInfo;
+  accessToken: string;
+  refreshToken: string;
+  accessExpiresAt: Date;
+  refreshExpiresAt: Date;
+  // false: cookie chỉ sống đến khi đóng trình duyệt và phiên có thời hạn ngắn hơn
+  rememberMe: boolean;
+  userInfo: UserInfo;
 }
 
 const hashToken = (token: string): string =>
-    createHash("sha256").update(token).digest("hex");
+  createHash("sha256").update(token).digest("hex");
 
 const buildUserInfo = (user: UserDocument | ParentDocument): UserInfo => "childUserId" in user ? ({
     _id: user._id.toString(),
@@ -68,54 +68,51 @@ const buildUserInfo = (user: UserDocument | ParentDocument): UserInfo => "childU
 });
 
 const asCredentials = (body: unknown): CredentialsBody =>
-    typeof body === "object" && body !== null ? (body as CredentialsBody) : {};
+  typeof body === "object" && body !== null ? (body as CredentialsBody) : {};
 
 const validateCredentials = (
-    body: unknown,
+  body: unknown,
 ): { email: string; password: string } => {
-    const { email, password } = asCredentials(body);
-    if (
-        typeof email !== "string" ||
-        !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())
-    ) {
-        throw new ApiError(
-            StatusCodes.BAD_REQUEST,
-            "A valid email is required",
-        );
-    }
-    if (
-        typeof password !== "string" ||
-        !password ||
-        Buffer.byteLength(password, "utf8") > 72
-    ) {
-        throw new ApiError(
-            StatusCodes.BAD_REQUEST,
-            "Password is required and must not exceed 72 bytes",
-        );
-    }
-    return { email: email.trim().toLowerCase(), password };
+  const { email, password } = asCredentials(body);
+  if (
+    typeof email !== "string" ||
+    !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())
+  ) {
+    throw new ApiError(StatusCodes.BAD_REQUEST, "A valid email is required");
+  }
+  if (
+    typeof password !== "string" ||
+    !password ||
+    Buffer.byteLength(password, "utf8") > 72
+  ) {
+    throw new ApiError(
+      StatusCodes.BAD_REQUEST,
+      "Password is required and must not exceed 72 bytes",
+    );
+  }
+  return { email: email.trim().toLowerCase(), password };
 };
 
 const ensureAccountCanSignIn = (user: UserDocument): void => {
-    if (user.status !== "active") {
-        throw new ApiError(StatusCodes.FORBIDDEN, "Account is not active");
-    }
+  if (user.status !== "active") {
+    throw new ApiError(StatusCodes.FORBIDDEN, "Account is not active");
+  }
 };
 
 const generateTokens = async (
     user: UserDocument | ParentDocument,
     rememberMe: boolean,
 ): Promise<AuthTokens> => {
-    if (
-        !env.ACCESS_TOKEN_SECRET ||
-        !env.REFRESH_TOKEN_SECRET ||
-        env.ACCESS_TOKEN_SECRET === env.REFRESH_TOKEN_SECRET
-    ) {
-        throw new ApiError(
-            StatusCodes.INTERNAL_SERVER_ERROR,
-            "Distinct JWT secrets must be configured",
-        );
-    }
+  if (
+    !env.ACCESS_TOKEN_SECRET ||
+    !env.REFRESH_TOKEN_SECRET ||
+    env.ACCESS_TOKEN_SECRET === env.REFRESH_TOKEN_SECRET
+  ) {
+    throw new ApiError(
+      StatusCodes.INTERNAL_SERVER_ERROR,
+      "Distinct JWT secrets must be configured",
+    );
+  }
 
     const subject = user._id.toString();
     const accountType = "childUserId" in user ? "parent" : "user";
@@ -156,14 +153,14 @@ const generateTokens = async (
         );
     }
 
-    return {
-        accessToken,
-        refreshToken,
-        accessExpiresAt: new Date(accessPayload.exp * 1000),
-        refreshExpiresAt: new Date(refreshPayload.exp * 1000),
-        rememberMe,
-        userInfo: buildUserInfo(user),
-    };
+  return {
+    accessToken,
+    refreshToken,
+    accessExpiresAt: new Date(accessPayload.exp * 1000),
+    refreshExpiresAt: new Date(refreshPayload.exp * 1000),
+    rememberMe,
+    userInfo: buildUserInfo(user),
+  };
 };
 
 const signUp = async (body: unknown): Promise<UserInfo> => {
@@ -233,46 +230,38 @@ const signIn = async (body: unknown): Promise<AuthTokens> => {
         expiresAt: tokens.refreshExpiresAt,
     });
 
-    return tokens;
+  return tokens;
 };
 
 const refreshToken = async (token: unknown): Promise<AuthTokens> => {
-    if (typeof token !== "string" || !token) {
-        throw new ApiError(
-            StatusCodes.UNAUTHORIZED,
-            "Refresh token is required",
-        );
-    }
+  if (typeof token !== "string" || !token) {
+    throw new ApiError(StatusCodes.UNAUTHORIZED, "Refresh token is required");
+  }
 
-    let payload: JwtPayload;
-    try {
-        payload = await JwtProvider.verifyToken(
-            token,
-            env.REFRESH_TOKEN_SECRET,
-        );
-    } catch (error) {
-        if (
-            error instanceof Error &&
-            [
-                "TokenExpiredError",
-                "JsonWebTokenError",
-                "NotBeforeError",
-            ].includes(error.name)
-        ) {
-            throw new ApiError(
-                StatusCodes.UNAUTHORIZED,
-                "Invalid or expired refresh token",
-            );
-        }
-        throw error;
-    }
+  let payload: JwtPayload;
+  try {
+    payload = await JwtProvider.verifyToken(token, env.REFRESH_TOKEN_SECRET);
+  } catch (error) {
     if (
-        payload.tokenType !== "refresh" ||
-        typeof payload.sub !== "string" ||
-        !/^[a-f\d]{24}$/i.test(payload.sub)
+      error instanceof Error &&
+      ["TokenExpiredError", "JsonWebTokenError", "NotBeforeError"].includes(
+        error.name,
+      )
     ) {
-        throw new ApiError(StatusCodes.UNAUTHORIZED, "Invalid refresh token");
+      throw new ApiError(
+        StatusCodes.UNAUTHORIZED,
+        "Invalid or expired refresh token",
+      );
     }
+    throw error;
+  }
+  if (
+    payload.tokenType !== "refresh" ||
+    typeof payload.sub !== "string" ||
+    !/^[a-f\d]{24}$/i.test(payload.sub)
+  ) {
+    throw new ApiError(StatusCodes.UNAUTHORIZED, "Invalid refresh token");
+  }
 
     const accountType = payload.accountType === "parent" ? "parent" : "user";
     const account = accountType === "parent" ? await Parent.findById(payload.sub) : await User.findById(payload.sub);
@@ -301,29 +290,28 @@ const refreshToken = async (token: unknown): Promise<AuthTokens> => {
 };
 
 const signOut = async (token?: unknown): Promise<void> => {
-    if (typeof token === "string" && token) {
-        await Session.deleteOne({ refreshToken: hashToken(token) });
-    }
+  if (typeof token === "string" && token) {
+    await Session.deleteOne({ refreshToken: hashToken(token) });
+  }
 };
 
 interface GoogleProfile {
-    sub: string;
-    email: string;
-    email_verified: boolean;
-    name?: string;
-    picture?: string;
+  sub: string;
+  email: string;
+  email_verified: boolean;
+  name?: string;
+  picture?: string;
 }
 
 const GOOGLE_ID_TOKEN_ISSUERS = ["accounts.google.com", "https://accounts.google.com"];
 
 // Id token từ Google Sign-In trên mobile. Endpoint tokeninfo kiểm tra chữ ký và hạn;
-// backend còn phải chắc token được cấp cho app này (aud), nếu không token đăng nhập app khác cũng dùng được.
-// Trên mobile cấu hình webClientId = GOOGLE_CLIENT_ID để id token mang aud này.
+// client_id phải trùng với GOOGLE_CLIENT_ID của ứng dụng.
 const fetchGoogleIdTokenProfile = async (idToken: string): Promise<GoogleProfile> => {
     if (!env.GOOGLE_CLIENT_ID) {
         throw new ApiError(
             StatusCodes.INTERNAL_SERVER_ERROR,
-            "Google client ID must be configured",
+            "Google sign in is not configured",
         );
     }
 
@@ -377,33 +365,36 @@ const googleSignInWithIdToken = async (idToken: unknown): Promise<AuthTokens> =>
 };
 
 const googleSignIn = async (token: unknown): Promise<AuthTokens> => {
-    if (typeof token !== "string" || !token.trim()) {
-        throw new ApiError(StatusCodes.BAD_REQUEST, "Google token is required");
+  if (typeof token !== "string" || !token.trim()) {
+    throw new ApiError(StatusCodes.BAD_REQUEST, "Google token is required");
+  }
+
+  let profile: GoogleProfile;
+  try {
+    const response = await fetch(
+      "https://www.googleapis.com/oauth2/v3/userinfo",
+      {
+        headers: { Authorization: `Bearer ${token}` },
+      },
+    );
+
+    if (!response.ok) {
+      throw new ApiError(
+        StatusCodes.UNAUTHORIZED,
+        "Google token is invalid or expired",
+      );
     }
 
-    let profile: GoogleProfile;
-    try {
-        const response = await fetch("https://www.googleapis.com/oauth2/v3/userinfo", {
-            headers: { Authorization: `Bearer ${token}` },
-        });
+    profile = (await response.json()) as GoogleProfile;
+  } catch (error) {
+    if (error instanceof ApiError) throw error;
+    throw new ApiError(
+      StatusCodes.UNAUTHORIZED,
+      "Failed to authenticate with Google",
+    );
+  }
 
-        if (!response.ok) {
-            throw new ApiError(
-                StatusCodes.UNAUTHORIZED,
-                "Google token is invalid or expired",
-            );
-        }
-
-        profile = (await response.json()) as GoogleProfile;
-    } catch (error) {
-        if (error instanceof ApiError) throw error;
-        throw new ApiError(
-            StatusCodes.UNAUTHORIZED,
-            "Failed to authenticate with Google",
-        );
-    }
-
-    return signInWithGoogleProfile(profile);
+  return signInWithGoogleProfile(profile);
 };
 
 // Tìm hoặc tạo tài khoản từ hồ sơ Google đã xác thực, rồi mở phiên đăng nhập
@@ -540,6 +531,18 @@ const changePassword = async (
     await Session.deleteMany({ userId: user._id });
 };
 
+const setPassword = async (userId: string, body: unknown): Promise<void> => {
+    const data =
+        typeof body === "object" && body !== null
+            ? (body as Record<string, unknown>)
+            : {};
+    return changePassword(userId, {
+        currentPassword: data.currentPassword,
+        newPassword: data.newPassword,
+        confirmPassword: data.confirmPassword ?? data.newPassword,
+    });
+};
+
 export const authService = {
     signUp,
     signIn,
@@ -548,4 +551,5 @@ export const authService = {
     googleSignIn,
     googleSignInWithIdToken,
     changePassword,
+    setPassword,
 };
