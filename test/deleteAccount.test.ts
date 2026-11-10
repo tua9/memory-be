@@ -15,6 +15,7 @@ import LinkCode from "../src/models/linkCode.js";
 import FamilyInvite from "../src/models/familyInvite.js";
 import GameRoom from "../src/models/gameRoom.js";
 import RoomResult from "../src/models/roomResult.js";
+import MatchTicket from "../src/models/matchTicket.js";
 import ApiError from "../src/utils/ApiError.js";
 
 const USER_ID = "507f1f77bcf86cd799439011";
@@ -33,6 +34,7 @@ const MODELS: [string, Patchable][] = [
     ["familyInvite", FamilyInvite as unknown as Patchable],
     ["gameRoom", GameRoom as unknown as Patchable],
     ["roomResult", RoomResult as unknown as Patchable],
+    ["matchTicket", MatchTicket as unknown as Patchable],
 ];
 
 // Giả các model: ghi lại thứ tự xoá, khôi phục sau mỗi test
@@ -76,7 +78,7 @@ test("deleteAccount: revokes sessions first, removes every user collection, then
         assert.equal(calls[0], "session");
         assert.equal(calls.at(-1), "user");
         assert.deepEqual([...calls].sort(), [
-            "familyInvite", "familyLink", "gameRoom", "gameSession", "linkCode", "numberSession",
+            "familyInvite", "familyLink", "gameRoom", "gameSession", "linkCode", "matchTicket", "numberSession",
             "progress", "resetLimit", "resetToken", "roomResult", "session", "user",
         ]);
     });

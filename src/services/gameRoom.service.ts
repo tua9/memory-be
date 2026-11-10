@@ -3,6 +3,7 @@ import { StatusCodes } from "http-status-codes";
 import { Types } from "mongoose";
 import { getGameEngine, parseAnswers } from "../games/index.js";
 import GameRoom, { type GameRoomDocument, type RoomAnswer, type RoomRound } from "../models/gameRoom.js";
+import MatchTicket from "../models/matchTicket.js";
 import RoomResult from "../models/roomResult.js";
 import type { UserDocument } from "../models/user.js";
 import ApiError from "../utils/ApiError.js";
@@ -294,23 +295,30 @@ const parseSetup = (raw: unknown) => {
     return { gameName, roundCount, rules: resolveRoundRules(gameName, body, getMaxLevel(gameName)) };
 };
 
-export const createRoom = async (me: Me, raw: unknown) => {
+const insertRoom = async (host: Me, guests: Me[], raw: unknown) => {
     await GameRoom.init();
     const { gameName, roundCount, rules } = parseSetup(raw);
+    const now = new Date();
+    const players = [host, ...guests].map(playerOf);
     for (let attempt = 0; attempt < 5; attempt += 1) {
         const code = Array.from({ length: CODE_LENGTH }, () => CODE_ALPHABET[randomInt(CODE_ALPHABET.length)]).join("");
         try {
-            const room = await GameRoom.create({
-                code, hostId: me._id, capacity: CAPACITY, players: [playerOf(me)], gameName, rules, roundCount,
-                expiresAt: addMs(new Date(), ROOM_TTL_MS),
+            return await GameRoom.create({
+                code, hostId: host._id, capacity: CAPACITY, players, gameName, rules, roundCount,
+                startsAt: players.length >= CAPACITY ? addMs(now, START_DELAY_MS) : null,
+                expiresAt: addMs(now, ROOM_TTL_MS),
             });
-            return view(room, me);
         } catch (error) {
             if ((error as { code?: number }).code !== 11000) throw error;
         }
     }
     throw conflict("Chưa tạo được mã phòng, vui lòng thử lại");
 };
+
+export const createRoom = async (me: Me, raw: unknown) => view(await insertRoom(me, [], raw), me);
+
+// Phòng cho hai người vừa được ghép trận: đủ người sẵn, trận tự bắt đầu sau 30 giây
+export const createMatchedRoom = async (host: Me, guest: Me, raw: unknown) => (await insertRoom(host, [guest], raw)).code;
 
 export const getRoom = async (code: string, me: Me) => view(await mutate(code, me, () => undefined), me);
 
@@ -473,5 +481,6 @@ export const deleteRoomDataOf = async (userId: string | Types.ObjectId) => {
     await Promise.all([
         GameRoom.deleteMany({ "players.userId": userId }),
         RoomResult.deleteMany({ userId }),
+        MatchTicket.deleteMany({ userId }),
     ]);
 };

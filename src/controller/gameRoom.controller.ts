@@ -3,6 +3,7 @@ import { StatusCodes } from "http-status-codes";
 import { asyncHandler } from "../middlewares/asyncHandler.js";
 import ApiError from "../utils/ApiError.js";
 import * as rooms from "../services/gameRoom.service.js";
+import * as matchmaking from "../services/matchmaking.service.js";
 
 const meOf = (request: Request) => {
     if (!request.user) throw new ApiError(StatusCodes.UNAUTHORIZED, "Unauthorized");
@@ -16,6 +17,9 @@ const handle = (run: (request: Request) => Promise<unknown>, status = StatusCode
 
 export const createRoom = handle((request) => rooms.createRoom(meOf(request), request.body), StatusCodes.CREATED);
 export const roomStats = handle((request) => rooms.getRoomStats(meOf(request)));
+export const findMatch = handle((request) => matchmaking.findMatch(meOf(request), request.body));
+export const pollMatch = handle((request) => matchmaking.pollMatch(meOf(request)));
+export const cancelMatch = handle((request) => matchmaking.cancelMatch(meOf(request)));
 export const leaderboard = handle((request) => rooms.getLeaderboard(meOf(request)));
 export const rematchRoom = handle((request) => rooms.rematch(codeOf(request), meOf(request), request.body));
 export const readRoom = handle((request) => rooms.getRoom(codeOf(request), meOf(request)));

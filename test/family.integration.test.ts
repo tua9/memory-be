@@ -15,6 +15,8 @@ import { authService } from "../src/services/user.service.js";
 import * as family from "../src/services/family.service.js";
 import { getChildReport } from "../src/services/familyReport.service.js";
 import * as rooms from "../src/services/gameRoom.service.js";
+import * as matchmaking from "../src/services/matchmaking.service.js";
+import MatchTicket from "../src/models/matchTicket.js";
 import type { MailMessage } from "../src/services/mail.service.js";
 import { connectTestDB } from "./helpers/testDbGuard.js";
 
@@ -185,6 +187,41 @@ test("family links and game rooms on isolated MongoDB", { skip: !process.env.MON
             await assert.rejects(rooms.getRoom(waiting.code, child), /Không tìm thấy phòng/);
         });
 
+        await context.test("matchmaking pairs two searchers of the same game into a room that starts in 30 seconds", async () => {
+            assert.deepEqual(await matchmaking.pollMatch(child), { status: "idle" });
+            assert.equal((await matchmaking.findMatch(child, { gameName: "card" })).status, "searching");
+            // Khác trò thì không ghép
+            assert.equal((await matchmaking.findMatch(stranger, { gameName: "word" })).status, "searching");
+            const paired = await matchmaking.findMatch(stranger, { gameName: "card" });
+            assert.equal(paired.status, "matched");
+            const code = (paired as { code: string }).code;
+            assert.deepEqual(await matchmaking.pollMatch(child), { status: "matched", code });
+            assert.deepEqual(await matchmaking.pollMatch(child), { status: "idle" });
+            const room = await rooms.getRoom(code, child);
+            assert.equal(room.players.length, 2);
+            assert.equal(room.isHost, true);
+            assert.equal(room.state, "waiting");
+            assert.ok(room.startsAt && new Date(room.startsAt).getTime() - Date.now() > 25_000);
+            assert.equal(room.rules.gameLevel, 1);
+
+            // Huỷ tìm trận
+            await matchmaking.findMatch(guardian, { gameName: "number" });
+            assert.deepEqual(await matchmaking.cancelMatch(guardian), { status: "idle" });
+            assert.deepEqual(await matchmaking.pollMatch(guardian), { status: "idle" });
+
+            // Ba người tìm cùng lúc: đúng hai người vào chung một phòng, người còn lại vẫn chờ
+            const first = await matchmaking.findMatch(guardian, { gameName: "image" });
+            const racing = await Promise.all([matchmaking.findMatch(child, { gameName: "image" }), matchmaking.findMatch(stranger, { gameName: "image" })]);
+            const polled = await Promise.all([guardian, child, stranger].map((user) => matchmaking.pollMatch(user)));
+            // Mã phòng đến từ câu trả lời lúc tìm (người ghép người khác) hoặc lúc hỏi lại (người được ghép)
+            const outcome = [first, ...racing].map((item, index) => item.status === "matched" ? item : polled[index]);
+            const codes = outcome.filter((item) => item.status === "matched").map((item) => (item as { code: string }).code);
+            assert.equal(codes.length, 2, JSON.stringify(outcome));
+            assert.equal(codes[0], codes[1]);
+            assert.equal(outcome.filter((item) => item.status === "searching").length, 1);
+            await MatchTicket.deleteMany({ userId: { $in: ids } });
+        });
+
         await context.test("deleting an account removes its links, codes, invites and rooms", async () => {
             await family.createLinkCode(child._id);
             await authService.deleteAccount(child._id.toString(), { password });
@@ -199,6 +236,7 @@ test("family links and game rooms on isolated MongoDB", { skip: !process.env.MON
             FamilyInvite.deleteMany({ childId: { $in: ids } }),
             GameRoom.deleteMany({ "players.userId": { $in: ids } }),
             RoomResult.deleteMany({ userId: { $in: ids } }),
+            MatchTicket.deleteMany({ userId: { $in: ids } }),
             User.deleteMany({ _id: { $in: ids } }),
         ]);
         await mongoose.disconnect();

@@ -21,7 +21,9 @@ Ai đăng nhập cũng tạo được phòng (`POST /api/rooms { gameName, mode,
 
 Các thao tác: `GET /:code`, `POST /:code/leave | kick { userId } | ready { ready } | start | recall | submit { answers } | next | finish | rematch`, `GET /api/rooms/stats`, `GET /api/rooms/leaderboard`. Chủ phòng mới được bắt đầu, chuyển vòng, kết thúc, chơi lại và mời người ra. Rời phòng được lúc chờ hoặc sau khi trận xong; chủ phòng rời thì phòng đóng.
 
-**Tự bắt đầu sau 30 giây.** Phòng chờ vừa đủ hai người (vào bằng mã hoặc chơi lại) thì server đặt `startsAt` = 30 giây sau; tới giờ thì lần hỏi phòng kế tiếp tự mở vòng 1. Cả hai bấm sẵn sàng thì vào trận ngay. Một người rời hoặc bị mời ra thì huỷ hẹn giờ.
+**Tự bắt đầu sau 30 giây.** Phòng chờ vừa đủ hai người (vào bằng mã, được ghép trận, hoặc chơi lại) thì server đặt `startsAt` = 30 giây sau; tới giờ thì lần hỏi phòng kế tiếp tự mở vòng 1. Cả hai bấm sẵn sàng thì vào trận ngay. Một người rời hoặc bị mời ra thì huỷ hẹn giờ.
+
+**Ghép trận tự động.** `POST /api/rooms/matchmaking { gameName }` vào hàng chờ, `GET` (client hỏi mỗi 2 giây: giữ vé còn hạn và thử ghép lại), `DELETE` để huỷ. Trả `{ status: "idle" | "searching" | "matched", code? }`. Người vào hàng sau ghép với người chờ trước cùng trò, ưu tiên cấp đã mở gần nhất; người chờ trước làm chủ phòng; đề ở cấp thấp hơn của hai người, 3 vòng, thời gian ghi nhớ mặc định. Mỗi lượt ghép khoá vé của mình rồi mới khoá vé người kia (`match_queue.state`), và chỉ ghép với vé vào hàng trước mình, nên không ai bị ghép vào hai phòng. Vé không được hỏi lại trong 30 giây thì hết hạn.
 
 **Chơi lại.** Sau khi trận xong (hoặc bị dừng), chủ phòng gọi `POST /:code/rematch`: không gửi gì thì giữ trò và cài đặt cũ, gửi cài đặt như lúc tạo phòng thì đổi trò. Phòng về trạng thái chờ với những người đang ở đó (đều phải bấm sẵn sàng lại), mỗi trận có `matchId` riêng và `history` giữ người thắng các trận trước để hiện tỉ số chung. Client tiếp tục hỏi phòng (chậm hơn) sau khi trận xong để thấy trận mới.
 
