@@ -1,7 +1,6 @@
 // Mục đích của link, để token đổi mật khẩu không dùng nhầm cho việc khác về sau
 export const PASSWORD_RESET_PURPOSE = "CHANGE_PASSWORD" as const;
-export const PARENT_PASSWORD_RESET_PURPOSE = "CHANGE_PARENT_PASSWORD" as const;
-export type PasswordResetPurpose = typeof PASSWORD_RESET_PURPOSE | typeof PARENT_PASSWORD_RESET_PURPOSE;
+export type PasswordResetPurpose = typeof PASSWORD_RESET_PURPOSE;
 
 // Link có hiệu lực 15 phút, dùng một lần
 export const PASSWORD_RESET_TOKEN_TTL_MS = 15 * 60 * 1000;
