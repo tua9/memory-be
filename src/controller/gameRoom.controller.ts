@@ -16,6 +16,8 @@ const handle = (run: (request: Request) => Promise<unknown>, status = StatusCode
 
 export const createRoom = handle((request) => rooms.createRoom(meOf(request), request.body), StatusCodes.CREATED);
 export const roomStats = handle((request) => rooms.getRoomStats(meOf(request)));
+export const leaderboard = handle((request) => rooms.getLeaderboard(meOf(request)));
+export const rematchRoom = handle((request) => rooms.rematch(codeOf(request), meOf(request), request.body));
 export const readRoom = handle((request) => rooms.getRoom(codeOf(request), meOf(request)));
 export const joinRoom = handle((request) => rooms.joinRoom(codeOf(request), meOf(request)));
 export const leaveRoom = handle((request) => rooms.leaveRoom(codeOf(request), meOf(request)));

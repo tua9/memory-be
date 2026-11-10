@@ -48,6 +48,10 @@ export interface GameRoomDocument extends Document {
     roundIndex: number;
     state: RoomState;
     rounds: RoomRound[];
+    // Mã của trận đang chơi; chơi lại thì đổi mã mới để kết quả mỗi trận ghi riêng
+    matchId: Types.ObjectId;
+    // Người thắng các trận đã xong trong phòng (userId hoặc "draw"), để hiện tỉ số chung khi chơi lại
+    history: { winner: string; at: Date }[];
     revision: number;
     expiresAt: Date;
     createdAt: Date;
@@ -72,6 +76,8 @@ const schema = new mongoose.Schema<GameRoomDocument>({
     roundIndex: { type: Number, default: -1 },
     state: { type: String, required: true, default: "waiting" },
     rounds: { type: mongoose.Schema.Types.Mixed, default: [] },
+    matchId: { type: mongoose.Schema.Types.ObjectId, default: () => new mongoose.Types.ObjectId() },
+    history: { type: mongoose.Schema.Types.Mixed, default: [] },
     revision: { type: Number, default: 0 },
     // Gia hạn mỗi khi phòng có thay đổi; phòng bỏ không 24 giờ thì tự xoá
     expiresAt: { type: Date, required: true },

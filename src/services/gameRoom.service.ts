@@ -1,6 +1,6 @@
 import { randomInt } from "node:crypto";
 import { StatusCodes } from "http-status-codes";
-import type { Types } from "mongoose";
+import { Types } from "mongoose";
 import { getGameEngine, parseAnswers } from "../games/index.js";
 import GameRoom, { type GameRoomDocument, type RoomAnswer, type RoomRound } from "../models/gameRoom.js";
 import RoomResult from "../models/roomResult.js";
@@ -19,7 +19,6 @@ const RESULT_GRACE_MS = 2 * 60_000;
 const SUBMIT_GRACE_MS = 3_000;
 const CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const CODE_LENGTH = 6;
-export const ROOM_POINTS = 10;
 
 type Me = Pick<UserDocument, "_id" | "username" | "avatarUrl">;
 const idOf = (value: { toString(): string }) => value.toString();
@@ -98,7 +97,7 @@ const advanceByClock = (room: GameRoomDocument, now: Date) => {
 };
 
 const snapshot = (room: GameRoomDocument) =>
-    JSON.stringify([room.state, room.roundIndex, room.players, room.rounds]);
+    JSON.stringify([room.state, room.roundIndex, room.players, room.rounds, room.gameName, room.rules, room.roundCount, room.matchId, room.history]);
 
 const findRoom = async (code: string) => {
     const room = await GameRoom.findOne({ code: normalizeRoomCode(code) });
@@ -117,30 +116,40 @@ const scoresOf = (room: GameRoomDocument) => {
     }));
 };
 
-// Chơi đủ số vòng và mọi người đều có trả lời ở mọi vòng thì mới được điểm giao lưu
-const earnedPoints = (room: GameRoomDocument) =>
-    room.state === "completed" && room.rounds.length === room.roundCount &&
-    room.rounds.every((round) => round.outcome !== null && Object.values(round.answers).every((answer) => answer.participated))
-        ? ROOM_POINTS : 0;
+// Người thắng trận: thắng nhiều vòng hơn (thắng trừ thua). Bằng nhau là hoà.
+const matchWinner = (room: GameRoomDocument): string => {
+    const ranked = Object.entries(scoresOf(room)).sort(([, a], [, b]) => b.points - a.points);
+    if (ranked.length < 2 || ranked[0][1].points === ranked[1][1].points) return "draw";
+    return ranked[0][0];
+};
+
+// Cúp chỉ trao khi trận chơi đủ vòng và cả hai đều có trả lời ở mọi vòng,
+// để không ai "nuôi cúp" bằng cách đấu với một tài khoản bỏ trống
+const cupWinner = (room: GameRoomDocument): string | null => {
+    const fair = room.state === "completed" && room.rounds.length === room.roundCount &&
+        room.rounds.every((round) => round.outcome !== null && Object.values(round.answers).every((answer) => answer.participated));
+    const winner = matchWinner(room);
+    return fair && winner !== "draw" ? winner : null;
+};
 
 const recordResults = async (room: GameRoomDocument) => {
     const scores = scoresOf(room);
-    const points = earnedPoints(room);
+    const winner = matchWinner(room);
+    const cupFor = cupWinner(room);
     const ids = room.players.map((player) => idOf(player.userId));
     const docs = ids.map((id) => {
         const opponent = ids.find((other) => other !== id) ?? id;
         const mine = scores[id];
-        const theirs = scores[opponent];
         return {
-            roomId: room._id, userId: id, opponentId: opponent, gameName: room.gameName,
-            outcome: mine.points > theirs.points ? "win" : mine.points < theirs.points ? "lose" : "draw",
-            wins: mine.wins, losses: mine.losses, draws: mine.draws, points, completedAt: new Date(),
+            roomId: room.matchId ?? room._id, userId: id, opponentId: opponent, gameName: room.gameName,
+            outcome: winner === "draw" ? "draw" : winner === id ? "win" : "lose",
+            wins: mine.wins, losses: mine.losses, draws: mine.draws, cups: cupFor === id ? 1 : 0, completedAt: new Date(),
         };
     });
     try {
         await RoomResult.insertMany(docs, { ordered: false });
     } catch (error) {
-        // Đã ghi từ request khác: unique (roomId, userId) chặn ghi trùng
+        // Đã ghi từ request khác: unique (mã trận, userId) chặn ghi trùng
         if ((error as { code?: number }).code !== 11000) throw error;
     }
 };
@@ -163,16 +172,22 @@ const mutate = async (
         advanceByClock(room, now);
         action(room, now, meId);
         if (snapshot(room) === before) return room;
+        const finishing = !wasCompleted && room.state === "completed";
+        if (finishing) room.history = [...(room.history ?? []), { winner: matchWinner(room), at: now }];
         const updated = await GameRoom.findOneAndUpdate(
             { _id: room._id, revision: room.revision },
             {
-                $set: { state: room.state, roundIndex: room.roundIndex, players: room.players, rounds: room.rounds, expiresAt: addMs(now, ROOM_TTL_MS) },
+                $set: {
+                    state: room.state, roundIndex: room.roundIndex, players: room.players, rounds: room.rounds,
+                    gameName: room.gameName, rules: room.rules, roundCount: room.roundCount,
+                    matchId: room.matchId, history: room.history, expiresAt: addMs(now, ROOM_TTL_MS),
+                },
                 $inc: { revision: 1 },
             },
             { new: true },
         );
         if (!updated) continue;
-        if (!wasCompleted && updated.state === "completed") await recordResults(updated);
+        if (finishing) await recordResults(updated);
         return updated;
     }
     throw conflict("Phòng vừa thay đổi, vui lòng thử lại");
@@ -234,7 +249,10 @@ const view = (room: GameRoomDocument, me: Me) => {
                 })),
             } : undefined,
         } : null,
-        pointsEarned: room.state === "completed" ? earnedPoints(room) : null,
+        // Người thắng từng vòng đã chơi (userId, "draw", hoặc null khi vòng đang diễn ra)
+        roundOutcomes: room.rounds.map((item) => item.outcome),
+        cupWinnerId: cupWinner(room),
+        history: (room.history ?? []).map((match) => ({ winner: match.winner })),
     };
 };
 
@@ -244,8 +262,8 @@ const playerOf = (me: Me) => ({
     userId: me._id as Types.ObjectId, username: me.username, avatarUrl: me.avatarUrl ?? null, ready: false, joinedAt: new Date(),
 });
 
-export const createRoom = async (me: Me, raw: unknown) => {
-    await GameRoom.init();
+// Cài đặt một trận: trò chơi, độ khó, thời gian, số vòng. Dùng khi tạo phòng và khi chơi lại với trò khác.
+const parseSetup = (raw: unknown) => {
     const body = asObject(raw);
     const gameName = parseGameName(body.gameName);
     const roundCount = body.roundCount;
@@ -253,7 +271,12 @@ export const createRoom = async (me: Me, raw: unknown) => {
         throw new ApiError(StatusCodes.BAD_REQUEST, `Số vòng phải từ 1 đến ${MAX_ROUNDS}`);
     }
     // Phòng đấu không ảnh hưởng tiến độ cá nhân nên chủ phòng chọn cấp nào cũng được
-    const rules = resolveRoundRules(gameName, body, getMaxLevel(gameName));
+    return { gameName, roundCount, rules: resolveRoundRules(gameName, body, getMaxLevel(gameName)) };
+};
+
+export const createRoom = async (me: Me, raw: unknown) => {
+    await GameRoom.init();
+    const { gameName, roundCount, rules } = parseSetup(raw);
     for (let attempt = 0; attempt < 5; attempt += 1) {
         const code = Array.from({ length: CODE_LENGTH }, () => CODE_ALPHABET[randomInt(CODE_ALPHABET.length)]).join("");
         try {
@@ -278,11 +301,12 @@ export const joinRoom = async (code: string, me: Me) => view(await mutate(code, 
     room.players.push(playerOf(me));
 }, { memberOnly: false }), me);
 
-// Chủ phòng rời phòng thì phòng bị huỷ; khách rời thì chỗ trống cho người khác vào
+// Rời phòng lúc chờ hoặc sau khi trận xong. Chủ phòng rời thì phòng đóng; khách rời thì chỗ trống cho người khác vào.
 export const leaveRoom = async (code: string, me: Me) => view(await mutate(code, me, (room, _now, meId) => {
-    if (room.state !== "waiting") throw conflict("Trận đấu đang diễn ra");
+    if (room.state !== "waiting" && room.state !== "completed" && room.state !== "cancelled") throw conflict("Trận đấu đang diễn ra");
+    // Chủ phòng cũng ra khỏi danh sách để người còn lại thấy chủ phòng đã đi, không chờ trận mới
     if (isHost(room, meId)) room.state = "cancelled";
-    else room.players = room.players.filter((player) => idOf(player.userId) !== meId);
+    room.players = room.players.filter((player) => idOf(player.userId) !== meId);
 }), me);
 
 export const kickPlayer = async (code: string, me: Me, raw: unknown) => view(await mutate(code, me, (room, _now, meId) => {
@@ -350,14 +374,74 @@ export const finishRoom = async (code: string, me: Me) => view(await mutate(code
     room.state = room.state === "round_result" && room.rounds.length === room.roundCount ? "completed" : "cancelled";
 }), me);
 
-export const getRoomStats = async (me: Me) => {
-    const results = await RoomResult.find({ userId: me._id }).select("outcome points").lean();
+// Chơi lại trong cùng phòng với người đang ở đây. Không gửi cài đặt thì giữ trò cũ; gửi cài đặt thì đổi trò.
+// Mỗi trận mới có mã trận riêng để kết quả và cúp ghi riêng từng trận.
+export const rematch = async (code: string, me: Me, raw: unknown) => {
+    const body = asObject(raw);
+    const setup = body.gameName === undefined ? null : parseSetup(body);
+    return view(await mutate(code, me, (room, _now, meId) => {
+        assertHost(room, meId, "Chỉ chủ phòng mới mở trận mới");
+        if (room.state !== "completed" && room.state !== "cancelled") throw conflict("Trận hiện tại chưa kết thúc");
+        if (setup) Object.assign(room, setup);
+        room.matchId = new Types.ObjectId();
+        room.rounds = [];
+        room.roundIndex = -1;
+        room.state = "waiting";
+        room.players.forEach((player) => { player.ready = false; });
+    }), me);
+};
+
+const countResults = async (userId: Types.ObjectId) => {
+    const results = await RoomResult.find({ userId }).select("outcome cups").lean();
     return {
         matches: results.length,
         wins: results.filter((item) => item.outcome === "win").length,
         losses: results.filter((item) => item.outcome === "lose").length,
         draws: results.filter((item) => item.outcome === "draw").length,
-        points: results.reduce((sum, item) => sum + item.points, 0),
+        cups: results.reduce((sum, item) => sum + item.cups, 0),
+    };
+};
+
+export const getRoomStats = async (me: Me) => countResults(me._id as Types.ObjectId);
+
+const LEADERBOARD_SIZE = 20;
+
+// Bảng xếp hạng cúp. Cùng số cúp thì cùng hạng.
+// shortcut: cộng lại từ room_results mỗi lần xem, đủ nhanh với vài chục nghìn trận; nhiều hơn thì lưu sẵn tổng cúp theo người.
+export const getLeaderboard = async (me: Me) => {
+    type Entry = { _id: Types.ObjectId; cups: number; wins: number; matches: number; user: { username: string; avatarUrl?: string | null } };
+    const totals = RoomResult.aggregate<Entry>()
+        .group({
+            _id: "$userId",
+            cups: { $sum: "$cups" },
+            wins: { $sum: { $cond: [{ $eq: ["$outcome", "win"] }, 1, 0] } },
+            matches: { $sum: 1 },
+        })
+        .match({ cups: { $gt: 0 } });
+    const top = await totals
+        .sort({ cups: -1, wins: -1, _id: 1 })
+        .limit(LEADERBOARD_SIZE * 2)
+        .lookup({ from: "users", localField: "_id", foreignField: "_id", as: "user" })
+        .unwind("$user")
+        .match({ "user.status": "active" })
+        .limit(LEADERBOARD_SIZE);
+    const mine = await countResults(me._id as Types.ObjectId);
+    const ahead = mine.cups > 0
+        ? (await RoomResult.aggregate<{ n: number }>()
+            .group({ _id: "$userId", cups: { $sum: "$cups" } })
+            .match({ cups: { $gt: mine.cups } })
+            .count("n"))[0]?.n ?? 0
+        : null;
+    const rankOf = (cups: number) => top.filter((entry) => entry.cups > cups).length + 1;
+    return {
+        entries: top.map((entry) => ({
+            _id: idOf(entry._id),
+            username: entry.user.username,
+            avatarUrl: entry.user.avatarUrl ?? null,
+            cups: entry.cups, wins: entry.wins, matches: entry.matches,
+            rank: rankOf(entry.cups), isMe: idOf(entry._id) === idOf(me._id),
+        })),
+        me: { ...mine, rank: ahead === null ? null : ahead + 1 },
     };
 };
 

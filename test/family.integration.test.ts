@@ -104,10 +104,49 @@ test("family links and game rooms on isolated MongoDB", { skip: !process.env.MON
             assert.ok(result.round?.result?.players.every((player) => player.correct === player.total && player.marks.every(Boolean)));
             const done = await rooms.finishRoom(code, stranger);
             assert.equal(done.state, "completed");
-            assert.equal(done.pointsEarned, rooms.ROOM_POINTS);
+            assert.equal(done.history.length, 1);
             await rooms.finishRoom(code, stranger);
-            assert.equal(await RoomResult.countDocuments({ roomId: (await GameRoom.findOne({ code }))!._id }), 2);
-            assert.equal((await rooms.getRoomStats(guardian)).points, rooms.ROOM_POINTS);
+            const firstMatch = (await GameRoom.findOne({ code }))!.matchId;
+            assert.equal(await RoomResult.countDocuments({ roomId: firstMatch }), 2);
+            // Hoà thì không ai có cúp; có người thắng thì đúng người đó có 1 cúp
+            const cupsAfterFirst = (await rooms.getRoomStats(stranger)).cups + (await rooms.getRoomStats(guardian)).cups;
+            assert.equal(cupsAfterFirst, done.cupWinnerId ? 1 : 0);
+
+            // Chơi lại trong cùng phòng, đổi sang trò Ghi nhớ số: chỉ chủ phòng mở được
+            await assert.rejects(rooms.rematch(code, guardian, {}), /chủ phòng/);
+            const again = await rooms.rematch(code, stranger, { gameName: "number", mode: "level", gameLevel: 1, roundCount: 1 });
+            assert.equal(again.state, "waiting");
+            assert.equal(again.gameName, "number");
+            assert.equal(again.players.length, 2);
+            assert.ok(again.players.every((player) => !player.ready));
+            await rooms.setReady(code, stranger, {});
+            await rooms.setReady(code, guardian, {});
+            const second = await rooms.startRoom(code, stranger);
+            const digits = second.round!.items!.map((item) => item.code);
+            await rooms.enterRecallPhase(code, stranger);
+            await rooms.enterRecallPhase(code, guardian);
+            await rooms.submitAnswers(code, stranger, { answers: digits });
+            // Có trả lời nhưng sai hết: vẫn tính là có tham gia nên trận vẫn được trao cúp
+            await rooms.submitAnswers(code, guardian, { answers: digits.map((digit) => String((Number(digit) + 1) % 10)) });
+            const won = await rooms.finishRoom(code, stranger);
+            assert.equal(won.cupWinnerId, stranger._id.toString());
+            assert.equal(won.history.length, 2);
+            assert.equal(won.history[1].winner, stranger._id.toString());
+            assert.notEqual((await GameRoom.findOne({ code }))!.matchId.toString(), firstMatch.toString());
+            assert.equal((await rooms.getRoomStats(stranger)).matches, 2);
+            assert.equal((await rooms.getRoomStats(stranger)).cups + (await rooms.getRoomStats(guardian)).cups, cupsAfterFirst + 1);
+
+            const board = await rooms.getLeaderboard(stranger);
+            const mine = board.entries.find((entry) => entry.isMe);
+            assert.ok(mine && mine.cups >= 1);
+            assert.equal(board.me.rank, mine.rank);
+
+            // Khách rời phòng sau trận: chủ phòng còn một mình, mở trận mới thì người khác vào được
+            await rooms.leaveRoom(code, guardian);
+            const alone = await rooms.rematch(code, stranger, {});
+            assert.equal(alone.players.length, 1);
+            await rooms.joinRoom(code, child);
+
             // Phòng đấu không đụng tới tiến độ cá nhân
             assert.equal(await GameSession.countDocuments({ userId: { $in: ids } }), 0);
             assert.equal(await UserGameProgress.countDocuments({ userId: { $in: ids } }), 0);
@@ -132,8 +171,14 @@ test("family links and game rooms on isolated MongoDB", { skip: !process.env.MON
             await rooms.joinRoom(waiting.code, stranger);
             await rooms.leaveRoom(waiting.code, stranger);
             assert.equal((await rooms.getRoom(waiting.code, child)).players.length, 1);
-            await rooms.leaveRoom(waiting.code, child);
-            assert.equal((await rooms.getRoom(waiting.code, child)).state, "cancelled");
+            await rooms.joinRoom(waiting.code, stranger);
+            const closed = await rooms.leaveRoom(waiting.code, child);
+            assert.equal(closed.state, "cancelled");
+            // Người còn lại thấy phòng đã đóng và chủ phòng không còn trong phòng
+            const left = await rooms.getRoom(waiting.code, stranger);
+            assert.equal(left.state, "cancelled");
+            assert.ok(left.players.every((player) => !player.isHost));
+            await assert.rejects(rooms.getRoom(waiting.code, child), /Không tìm thấy phòng/);
         });
 
         await context.test("deleting an account removes its links, codes, invites and rooms", async () => {
