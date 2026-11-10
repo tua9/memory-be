@@ -17,6 +17,8 @@ const ROOM_TTL_MS = 24 * 60 * 60_000;
 const RESULT_GRACE_MS = 2 * 60_000;
 // Bài nộp đúng lúc hết giờ vẫn được nhận dù đường truyền chậm vài giây
 const SUBMIT_GRACE_MS = 3_000;
+// Đủ hai người thì trận tự bắt đầu sau 30 giây; cả hai bấm sẵn sàng thì vào trận ngay
+export const START_DELAY_MS = 30_000;
 const CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const CODE_LENGTH = 6;
 
@@ -69,6 +71,10 @@ const finishRoundIfReady = (room: GameRoomDocument, round: RoomRound) => {
 
 // Mọi request đều đối chiếu hạn giờ theo đồng hồ server: không ai cần giữ tab mở để phòng chạy tiếp
 const advanceByClock = (room: GameRoomDocument, now: Date) => {
+    if (room.state === "waiting") {
+        if (room.startsAt && room.players.length >= room.capacity && now >= room.startsAt) beginMatch(room, now);
+        return;
+    }
     if (room.state === "round_result") {
         const last = room.rounds[room.roundIndex];
         if (last?.resultAt && now.getTime() >= last.resultAt.getTime() + RESULT_GRACE_MS) {
@@ -97,7 +103,7 @@ const advanceByClock = (room: GameRoomDocument, now: Date) => {
 };
 
 const snapshot = (room: GameRoomDocument) =>
-    JSON.stringify([room.state, room.roundIndex, room.players, room.rounds, room.gameName, room.rules, room.roundCount, room.matchId, room.history]);
+    JSON.stringify([room.state, room.roundIndex, room.players, room.rounds, room.gameName, room.rules, room.roundCount, room.matchId, room.history, room.startsAt]);
 
 const findRoom = async (code: string) => {
     const room = await GameRoom.findOne({ code: normalizeRoomCode(code) });
@@ -180,7 +186,7 @@ const mutate = async (
                 $set: {
                     state: room.state, roundIndex: room.roundIndex, players: room.players, rounds: room.rounds,
                     gameName: room.gameName, rules: room.rules, roundCount: room.roundCount,
-                    matchId: room.matchId, history: room.history, expiresAt: addMs(now, ROOM_TTL_MS),
+                    matchId: room.matchId, history: room.history, startsAt: room.startsAt ?? null, expiresAt: addMs(now, ROOM_TTL_MS),
                 },
                 $inc: { revision: 1 },
             },
@@ -203,6 +209,19 @@ const makeRound = (room: GameRoomDocument, now: Date): RoomRound => {
         answers: Object.fromEntries(room.players.map((player) => [idOf(player.userId), blank()])),
         outcome: null, resultAt: null,
     };
+};
+
+const beginMatch = (room: GameRoomDocument, now: Date) => {
+    room.rounds = [makeRound(room, now)];
+    room.roundIndex = 0;
+    room.state = "memorizing";
+    room.startsAt = null;
+};
+
+// Phòng chờ đủ người thì hẹn giờ bắt đầu (giữ mốc đã hẹn); thiếu người thì huỷ hẹn
+const armCountdown = (room: GameRoomDocument, now: Date) => {
+    if (room.state !== "waiting" || room.players.length < room.capacity) room.startsAt = null;
+    else room.startsAt ??= addMs(now, START_DELAY_MS);
 };
 
 const view = (room: GameRoomDocument, me: Me) => {
@@ -251,6 +270,7 @@ const view = (room: GameRoomDocument, me: Me) => {
         } : null,
         // Người thắng từng vòng đã chơi (userId, "draw", hoặc null khi vòng đang diễn ra)
         roundOutcomes: room.rounds.map((item) => item.outcome),
+        startsAt: room.state === "waiting" ? room.startsAt ?? null : null,
         cupWinnerId: cupWinner(room),
         history: (room.history ?? []).map((match) => ({ winner: match.winner })),
     };
@@ -294,42 +314,44 @@ export const createRoom = async (me: Me, raw: unknown) => {
 
 export const getRoom = async (code: string, me: Me) => view(await mutate(code, me, () => undefined), me);
 
-export const joinRoom = async (code: string, me: Me) => view(await mutate(code, me, (room, _now, meId) => {
+export const joinRoom = async (code: string, me: Me) => view(await mutate(code, me, (room, now, meId) => {
     if (isPlayer(room, meId)) return;
     if (room.state !== "waiting") throw conflict("Trận đấu đã bắt đầu hoặc đã kết thúc");
     if (room.players.length >= room.capacity) throw conflict("Phòng đã đủ người");
     room.players.push(playerOf(me));
+    armCountdown(room, now);
 }, { memberOnly: false }), me);
 
 // Rời phòng lúc chờ hoặc sau khi trận xong. Chủ phòng rời thì phòng đóng; khách rời thì chỗ trống cho người khác vào.
-export const leaveRoom = async (code: string, me: Me) => view(await mutate(code, me, (room, _now, meId) => {
+export const leaveRoom = async (code: string, me: Me) => view(await mutate(code, me, (room, now, meId) => {
     if (room.state !== "waiting" && room.state !== "completed" && room.state !== "cancelled") throw conflict("Trận đấu đang diễn ra");
     // Chủ phòng cũng ra khỏi danh sách để người còn lại thấy chủ phòng đã đi, không chờ trận mới
     if (isHost(room, meId)) room.state = "cancelled";
     room.players = room.players.filter((player) => idOf(player.userId) !== meId);
+    armCountdown(room, now);
 }), me);
 
-export const kickPlayer = async (code: string, me: Me, raw: unknown) => view(await mutate(code, me, (room, _now, meId) => {
+export const kickPlayer = async (code: string, me: Me, raw: unknown) => view(await mutate(code, me, (room, now, meId) => {
     assertHost(room, meId, "Chỉ chủ phòng mới mời người chơi ra");
     if (room.state !== "waiting") throw conflict("Trận đấu đang diễn ra");
     const target = asObject(raw).userId;
     if (typeof target !== "string" || target === meId || !isPlayer(room, target)) throw new ApiError(StatusCodes.BAD_REQUEST, "Người chơi không hợp lệ");
     room.players = room.players.filter((player) => idOf(player.userId) !== target);
+    armCountdown(room, now);
 }), me);
 
-export const setReady = async (code: string, me: Me, raw: unknown) => view(await mutate(code, me, (room, _now, meId) => {
+export const setReady = async (code: string, me: Me, raw: unknown) => view(await mutate(code, me, (room, now, meId) => {
     if (room.state !== "waiting") throw conflict("Trận đấu đã bắt đầu");
     const player = room.players.find((item) => idOf(item.userId) === meId);
     if (player) player.ready = asObject(raw).ready !== false;
+    if (room.players.length >= room.capacity && room.players.every((item) => item.ready)) beginMatch(room, now);
 }), me);
 
 export const startRoom = async (code: string, me: Me) => view(await mutate(code, me, (room, now, meId) => {
     assertHost(room, meId, "Chỉ chủ phòng mới bắt đầu được");
     if (room.state !== "waiting") throw conflict("Trận đấu đã bắt đầu");
     if (room.players.length < room.capacity || !room.players.every((player) => player.ready)) throw conflict("Cần đủ người và tất cả đã sẵn sàng");
-    room.rounds.push(makeRound(room, now));
-    room.roundIndex = 0;
-    room.state = "memorizing";
+    beginMatch(room, now);
 }), me);
 
 export const enterRecallPhase = async (code: string, me: Me) => view(await mutate(code, me, (room, now, meId) => {
@@ -379,7 +401,7 @@ export const finishRoom = async (code: string, me: Me) => view(await mutate(code
 export const rematch = async (code: string, me: Me, raw: unknown) => {
     const body = asObject(raw);
     const setup = body.gameName === undefined ? null : parseSetup(body);
-    return view(await mutate(code, me, (room, _now, meId) => {
+    return view(await mutate(code, me, (room, now, meId) => {
         assertHost(room, meId, "Chỉ chủ phòng mới mở trận mới");
         if (room.state !== "completed" && room.state !== "cancelled") throw conflict("Trận hiện tại chưa kết thúc");
         if (setup) Object.assign(room, setup);
@@ -388,6 +410,8 @@ export const rematch = async (code: string, me: Me, raw: unknown) => {
         room.roundIndex = -1;
         room.state = "waiting";
         room.players.forEach((player) => { player.ready = false; });
+        room.startsAt = null;
+        armCountdown(room, now);
     }), me);
 };
 

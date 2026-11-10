@@ -82,10 +82,13 @@ test("family links and game rooms on isolated MongoDB", { skip: !process.env.MON
             await rooms.joinRoom(code, guardian);
             await assert.rejects(rooms.joinRoom(code, child), /đủ người/);
             await assert.rejects(rooms.startRoom(code, stranger), /sẵn sàng/);
-            await rooms.setReady(code, stranger, {});
-            await rooms.setReady(code, guardian, {});
             await assert.rejects(rooms.startRoom(code, guardian), /chủ phòng/);
-            const started = await rooms.startRoom(code, stranger);
+            // Đủ hai người thì có hẹn giờ tự bắt đầu; cả hai sẵn sàng thì vào trận ngay
+            const ready = await rooms.setReady(code, stranger, {});
+            assert.ok(ready.startsAt && new Date(ready.startsAt).getTime() - Date.now() > 25_000);
+            const started = await rooms.setReady(code, guardian, {});
+            assert.equal(started.state, "memorizing");
+            assert.equal(started.startsAt, null);
             assert.equal(started.round?.items?.length, started.rules.totalItems);
             const revision = (await rooms.getRoom(code, guardian)).revision;
             assert.equal((await rooms.getRoom(code, stranger)).revision, revision);
@@ -120,8 +123,7 @@ test("family links and game rooms on isolated MongoDB", { skip: !process.env.MON
             assert.equal(again.players.length, 2);
             assert.ok(again.players.every((player) => !player.ready));
             await rooms.setReady(code, stranger, {});
-            await rooms.setReady(code, guardian, {});
-            const second = await rooms.startRoom(code, stranger);
+            const second = await rooms.setReady(code, guardian, {});
             const digits = second.round!.items!.map((item) => item.code);
             await rooms.enterRecallPhase(code, stranger);
             await rooms.enterRecallPhase(code, guardian);
@@ -155,9 +157,9 @@ test("family links and game rooms on isolated MongoDB", { skip: !process.env.MON
         await context.test("a missing answer is filled after the grace period; the host leaving cancels", async () => {
             const { code } = await rooms.createRoom(guardian, { gameName: "number", mode: "level", gameLevel: 1, roundCount: 2 });
             await rooms.joinRoom(code, child);
-            await rooms.setReady(code, guardian, {});
-            await rooms.setReady(code, child, {});
-            await rooms.startRoom(code, guardian);
+            // Không ai bấm sẵn sàng: hết 30 giây thì trận tự bắt đầu
+            await GameRoom.updateOne({ code }, { $set: { startsAt: new Date(Date.now() - 1_000) } });
+            assert.equal((await rooms.getRoom(code, child)).state, "memorizing");
             const expired = new Date(Date.now() - 10_000);
             await GameRoom.updateOne({ code }, { $set: { "rounds.0.memorizeEndsAt": expired, "rounds.0.recallEndsAt": expired } });
             const timeout = await rooms.getRoom(code, child);
@@ -169,7 +171,9 @@ test("family links and game rooms on isolated MongoDB", { skip: !process.env.MON
 
             const waiting = await rooms.createRoom(child, { gameName: "card", mode: "level", gameLevel: 1, roundCount: 1 });
             await rooms.joinRoom(waiting.code, stranger);
-            await rooms.leaveRoom(waiting.code, stranger);
+            const alone = await rooms.leaveRoom(waiting.code, stranger);
+            // Còn một người thì huỷ hẹn giờ bắt đầu
+            assert.equal(alone.startsAt, null);
             assert.equal((await rooms.getRoom(waiting.code, child)).players.length, 1);
             await rooms.joinRoom(waiting.code, stranger);
             const closed = await rooms.leaveRoom(waiting.code, child);
