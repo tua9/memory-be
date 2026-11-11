@@ -86,3 +86,17 @@ Hỗ trợ 2 chế độ luyện tập:
 - `GET /sessions/:id/result`: Chi tiết kết quả và so sánh từng vị trí.
 
 Xem tài liệu chi tiết tại [`docs/random-numbers-api.md`](./docs/random-numbers-api.md).
+
+## Huấn luyện viên AI
+
+`GET /api/progress/coach` yêu cầu đăng nhập và phân tích các ván theo cấp độ, độ chính xác, kỷ lục và số ván của chính tài khoản đó trong cả năm trò chơi (không tính chế độ tự chọn hoặc thử thách ngày). API trả về mức hiện tại, trò mạnh nhất, trò nên ưu tiên và ba buổi luyện tập gợi ý trong tuần.
+
+Phân tích được tính từ dữ liệu tiến độ đã lưu trong MongoDB.
+
+Chat sử dụng Google Gemini; đặt `GEMINI_API_KEY` trong `.env` và tùy chọn model bằng `GEMINI_MODEL` (mặc định `gemini-3.5-flash-lite`). Tin nhắn hội thoại và dữ liệu tóm tắt tiến độ sẽ được gửi tới Google Gemini. Giữ API key trong `.env`, không commit hoặc chia sẻ key. Nếu chưa có key hoặc Gemini không khả dụng, endpoint trả lỗi thay vì chuyển sang model local. `POST /api/progress/coach/chat` nhận tối đa 8 tin nhắn hội thoại; yêu cầu được giới hạn độ dài và số lần gọi để tránh làm quá tải model.
+
+Lộ trình tập luyện:
+
+- `POST /api/progress/coach/chat` nhận `{ messages, draft? }`. `messages` bắt đầu và kết thúc bằng tin của người dùng; `draft` là lộ trình đang bàn để AI sửa tiếp. Kết quả là `{ reply, plan }`: Gemini trả JSON theo schema, `plan` là bản nháp (hoặc `null` khi AI còn cần hỏi thêm) và không được lưu.
+- `PUT /api/progress/coach/plan` nhận `{ goal, minutesPerDay, sessions[] }` (mỗi buổi: `day` 1 = Thứ 2 … 7 = Chủ nhật, `minutes`, `gameName`, `level`, `targetAccuracy`, `tip`). Lộ trình từ Gemini hay từ client đều được kiểm tra ở `Agent/plan.service.ts`: cấp hạ về cấp đã mở, tổng phút mỗi ngày không vượt `minutesPerDay`, tối đa 3 buổi mỗi ngày.
+- `GET /api/progress/coach/plan` trả lộ trình đã lưu kèm tiến độ tuần hiện tại (giờ Việt Nam): `bestAccuracy` của mỗi buổi là độ chính xác cao nhất của các ván cùng game, cấp ≥ cấp của buổi, chơi đúng ngày đó; `null` là chưa tập. Lộ trình dạng chữ của bản cũ được coi như chưa lưu.

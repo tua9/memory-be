@@ -17,6 +17,8 @@ export const env = {
     CLIENT_URL: process.env.CLIENT_URL || "http://localhost:5173",
     MONGODB_CONNECTION_STRING: process.env.MONGODB_CONNECTION_STRING?.trim() || "",
     MONGODB_TEST_CONNECTION_STRING: process.env.MONGODB_TEST_CONNECTION_STRING?.trim() || "",
+    GEMINI_API_KEY: process.env.GEMINI_API_KEY?.trim() || "",
+    GEMINI_MODEL: process.env.GEMINI_MODEL?.trim() || "gemini-3.5-flash-lite",
     ACCESS_TOKEN_SECRET: process.env.ACCESS_TOKEN_SECRET || "",
     REFRESH_TOKEN_SECRET: process.env.REFRESH_TOKEN_SECRET || "",
     ACCESS_TOKEN_TTL: process.env.ACCESS_TOKEN_TTL || "15m",
