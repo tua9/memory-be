@@ -29,3 +29,6 @@ const createIpLimiter = (limit: number) =>
 export const forgotPasswordIpLimiter = createIpLimiter(10);
 export const passwordResetIpLimiter = createIpLimiter(30);
 export const coachChatIpLimiter = createIpLimiter(20);
+
+// Nhập mã liên kết gia đình và mã phòng đấu: mã ngắn nên phải chặn việc thử lần lượt từng mã
+export const codeEntryIpLimiter = createIpLimiter(30);

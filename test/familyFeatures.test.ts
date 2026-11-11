@@ -1,17 +1,19 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { decideRoundWinner } from "../src/services/familyRoom.service.js";
-import { summarizeParentActivities } from "../src/services/parentReport.service.js";
+import { decideRoundWinner } from "../src/services/gameRoom.service.js";
+import { summarizeActivities } from "../src/services/familyReport.service.js";
 
 test("round winner compares correct positions before measured milliseconds", () => {
-    assert.equal(decideRoundWinner({ correct: 4, usedMs: 30_000 }, { correct: 3, usedMs: 1_000 }), "parent");
-    assert.equal(decideRoundWinner({ correct: 4, usedMs: 2_001 }, { correct: 4, usedMs: 2_000 }), "child");
-    assert.equal(decideRoundWinner({ correct: 4, usedMs: 2_000 }, { correct: 4, usedMs: 2_000 }), "draw");
-    assert.equal(decideRoundWinner({ correct: 0, usedMs: 1_000 }, { correct: 0, usedMs: 30_000 }), "draw");
+    const pair = (a: [number, number], b: [number, number]) =>
+        decideRoundWinner([{ id: "a", correct: a[0], usedMs: a[1] }, { id: "b", correct: b[0], usedMs: b[1] }]);
+    assert.equal(pair([4, 30_000], [3, 1_000]), "a");
+    assert.equal(pair([4, 2_001], [4, 2_000]), "b");
+    assert.equal(pair([4, 2_000], [4, 2_000]), "draw");
+    assert.equal(pair([0, 1_000], [0, 30_000]), "draw");
 });
 
-test("parent summary weighs positions and counts Vietnam calendar days", () => {
-    const result = summarizeParentActivities([
+test("child summary weighs positions and counts Vietnam calendar days", () => {
+    const result = summarizeActivities([
         { gameName: "card", completedAt: new Date("2026-11-08T17:30:00Z"), totalItems: 10, correctItems: 8, durationSec: 60 },
         { gameName: "card", completedAt: new Date("2026-11-08T18:00:00Z"), totalItems: 2, correctItems: 0, durationSec: 10 },
         { gameName: "word", completedAt: new Date("2026-11-09T18:00:00Z"), totalItems: 4, correctItems: 4, durationSec: 20 },

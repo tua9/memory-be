@@ -2,9 +2,10 @@ import { StatusCodes } from "http-status-codes";
 import { PROGRESS_TIME_ZONE } from "../config/progression.js";
 import GameSession from "../models/gameSession.js";
 import NumberSession from "../models/numberSession.js";
-import User from "../models/user.js";
 import UserGameProgress from "../models/userGameProgress.js";
-import type { ParentDocument } from "../models/parent.js";
+import RoomResult from "../models/roomResult.js";
+import type { UserDocument } from "../models/user.js";
+import type { AgeGroup } from "../models/familyLink.js";
 import { userProfileService } from "./profile.service.js";
 import { addDaysToDateKey, startOfDateKey, toDateKey, weekdayOfDateKey } from "../utils/date.js";
 import ApiError from "../utils/ApiError.js";
@@ -34,7 +35,7 @@ const readActivities = async (childUserId: string, start: Date, end: Date): Prom
     ].sort((a, b) => b.completedAt.getTime() - a.completedAt.getTime());
 };
 
-export const summarizeParentActivities = (activities: readonly Activity[]) => {
+export const summarizeActivities = (activities: readonly Activity[]) => {
     const totalItems = activities.reduce((sum, item) => sum + item.totalItems, 0);
     return {
         games: activities.length,
@@ -51,22 +52,35 @@ export const summarizeParentActivities = (activities: readonly Activity[]) => {
     };
 };
 
-export const getParentOverview = async (parent: ParentDocument) => {
-    const child = await User.findById(parent.childUserId).select("username avatarUrl progress");
-    if (!child) throw new ApiError(StatusCodes.NOT_FOUND, "Child account not found");
-    const [activities, progress] = await Promise.all([
-        readActivities(child._id.toString(), new Date(0), new Date()),
-        UserGameProgress.find({ userId: child._id }).select("gameName unlockedLevel stats records").lean().exec(),
-    ]);
+// Số trận ba mẹ đã đấu cùng con trong phòng đấu, tính từ phía ba mẹ
+const togetherStats = async (guardianId: string, childId: string) => {
+    // Trận nhiều người lưu mọi đối thủ ở opponentIds; bản ghi cũ chỉ có opponentId
+    const results = await RoomResult.find({ userId: guardianId, $or: [{ opponentIds: childId }, { opponentId: childId }] }).select("outcome").lean();
     return {
-        child: { username: child.username, avatarUrl: child.avatarUrl, profile: userProfileService.getProfile(child) },
-        summary: summarizeParentActivities(activities),
-        progress,
-        ageGroup: parent.ageGroup,
+        matches: results.length,
+        wins: results.filter((item) => item.outcome === "win").length,
+        losses: results.filter((item) => item.outcome === "lose").length,
+        draws: results.filter((item) => item.outcome === "draw").length,
     };
 };
 
-export const getParentReport = async (parent: ParentDocument, query: Record<string, unknown>, now = new Date()) => {
+export const getChildOverview = async (guardianId: string, child: UserDocument, ageGroup: AgeGroup | null) => {
+    const childId = child._id.toString();
+    const [activities, progress, together] = await Promise.all([
+        readActivities(childId, new Date(0), new Date()),
+        UserGameProgress.find({ userId: child._id }).select("gameName unlockedLevel stats records").lean().exec(),
+        togetherStats(guardianId, childId),
+    ]);
+    return {
+        child: { _id: childId, username: child.username, avatarUrl: child.avatarUrl ?? null, profile: userProfileService.getProfile(child) },
+        summary: summarizeActivities(activities),
+        progress,
+        ageGroup,
+        together,
+    };
+};
+
+export const getChildReport = async (childId: string, ageGroup: AgeGroup | null, query: Record<string, unknown>, now = new Date()) => {
     const period = query.period ?? "day";
     if (period !== "day" && period !== "week") throw new ApiError(StatusCodes.BAD_REQUEST, "period must be day or week");
     const today = toDateKey(now, PROGRESS_TIME_ZONE);
@@ -83,11 +97,11 @@ export const getParentReport = async (parent: ParentDocument, query: Record<stri
     const elapsedMs = currentEnd.getTime() - start.getTime();
     const previousEnd = new Date(previousStart.getTime() + elapsedMs);
     const [activities, previous] = await Promise.all([
-        readActivities(parent.childUserId.toString(), start, currentEnd),
-        readActivities(parent.childUserId.toString(), previousStart, previousEnd),
+        readActivities(childId, start, currentEnd),
+        readActivities(childId, previousStart, previousEnd),
     ]);
-    const summary = summarizeParentActivities(activities);
-    const previousSummary = summarizeParentActivities(previous);
+    const summary = summarizeActivities(activities);
+    const previousSummary = summarizeActivities(previous);
     const incomplete = now < end;
     const observation = summary.games === 0
         ? "Chưa có lượt luyện tập được ghi nhận trong kỳ này."
@@ -98,10 +112,10 @@ export const getParentReport = async (parent: ParentDocument, query: Record<stri
         ? `So với cùng khoảng thời gian kỳ trước: ${summary.games - previousSummary.games >= 0 ? "+" : ""}${summary.games - previousSummary.games} ván.`
         : "Chưa đủ dữ liệu để nhận xét xu hướng.";
     const suggestions = [
-        { title: "Cùng kể chuyện nối đồ vật", reason: parent.ageGroup ? `Phù hợp nhóm tuổi ${parent.ageGroup}; ba mẹ có thể cùng con thử cách liên kết hình ảnh.` : "Gợi ý chung khi chưa khai báo nhóm tuổi.",
+        { title: "Cùng kể chuyện nối đồ vật", reason: ageGroup ? `Phù hợp nhóm tuổi ${ageGroup}; ba mẹ có thể cùng con thử cách liên kết hình ảnh.` : "Gợi ý chung khi chưa khai báo nhóm tuổi.",
             steps: ["Chọn 3 đồ vật quen thuộc.", "Cùng tạo một câu chuyện nối chúng.", "Lần lượt kể lại."], question: "Con nhớ chi tiết nào thú vị nhất?", gameName: "word" },
-        { title: "Chơi một phiên hai người", reason: summary.games ? "Cùng thử lại một trò con đã luyện tập." : "Bắt đầu với một phiên chơi ngắn cùng nhau.",
-            steps: ["Ba mẹ tạo phòng.", "Con vào phòng trên thiết bị riêng.", "Cả hai cùng sẵn sàng."], question: "Con muốn chọn trò nào hôm nay?", gameName: summary.byGame[0]?.gameName ?? "card" },
+        { title: "Đấu trí nhớ cùng con", reason: summary.games ? "Cùng thử lại một trò con đã luyện tập." : "Bắt đầu với một trận ngắn cùng nhau.",
+            steps: ["Ba mẹ tạo phòng đấu.", "Gửi mã phòng cho con.", "Cả hai cùng sẵn sàng rồi bắt đầu."], question: "Con muốn chọn trò nào hôm nay?", gameName: summary.byGame[0]?.gameName ?? "card" },
     ];
     return { period, date: chosen, start, end, incomplete, timeZone: PROGRESS_TIME_ZONE,
         summary, previousSummary, activities, comment: { observation, evidence, trend, suggestion: suggestions[0].title }, suggestions };
