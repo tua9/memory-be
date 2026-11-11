@@ -3,46 +3,59 @@ import { test } from "node:test";
 import { StatusCodes } from "http-status-codes";
 import ApiError from "../../src/utils/ApiError.js";
 import {
-    buildCoachPlanPrompt,
     buildSystemPrompt,
     parseCoachChatMessages,
-    parseCoachPlanMessages,
+    parseCoachDraft,
+    parseCoachResponse,
 } from "../../src/Agent/chat.service.js";
+import { COACH_RESPONSE_SCHEMA } from "../../src/Agent/plan.service.js";
 import { buildCoachAnalysis } from "../../src/Agent/coach.service.js";
 import { requestGemini } from "../../src/Agent/tools/gemini.tool.js";
 
-test("coach prompt keeps each day's total within the requested time budget", () => {
-    const prompt = buildSystemPrompt(buildCoachAnalysis([]));
-    assert.match(prompt, /không được vượt ngân sách phút\/ngày/);
-    assert.match(prompt, /không tạo hai buổi 15 phút/);
-    assert.match(prompt, /không lặp hai buổi giống nhau trong cùng ngày/);
+const PLAN = {
+    goal: "Nhớ dãy số dài hơn",
+    minutesPerDay: 15,
+    sessions: [{ day: 1, minutes: 15, gameName: "number", level: 4, targetAccuracy: 80, tip: "Chia cụm 2 chữ số." }],
+};
+
+test("coach prompt keeps each day's total within the requested time budget and carries the plan under discussion", () => {
+    const analysis = buildCoachAnalysis([]);
+    const prompt = buildSystemPrompt(analysis);
+    assert.match(prompt, /tổng thời lượng mọi buổi trong một ngày không được vượt X/);
+    assert.match(prompt, /1 = Thứ 2/);
+    assert.doesNotMatch(prompt, /Lộ trình đang bàn/);
+    assert.match(buildSystemPrompt(analysis, PLAN as never), /Lộ trình đang bàn:\n\{"goal":"Nhớ dãy số dài hơn"/);
 });
 
-test("coach plan prompt prioritizes user requirements and bounds the weekly schedule", () => {
-    const prompt = buildCoachPlanPrompt(buildCoachAnalysis([]));
-    assert.match(prompt, /yêu cầu trực tiếp của người dùng/);
-    assert.match(prompt, /tổng thời lượng của tất cả hoạt động trong ngày không được vượt X/);
-    assert.match(prompt, /Tối đa 7 buổi trong tuần/);
-    assert.match(prompt, /tiến độ hiện tại/i);
+test("the plan under discussion is optional and validated", () => {
+    assert.equal(parseCoachDraft({ messages: [] }), null);
+    assert.equal(parseCoachDraft({ draft: null }), null);
+    assert.equal(parseCoachDraft({ draft: PLAN })?.goal, "Nhớ dãy số dài hơn");
+    assert.throws(() => parseCoachDraft({ draft: { ...PLAN, sessions: [] } }), ApiError);
 });
 
-test("coach plan accepts an alternating transcript ending in the selected assistant reply", () => {
-    assert.deepEqual(parseCoachPlanMessages({
-        messages: [
-            { role: "user", content: "15 phút mỗi ngày, luyện Gương mặt & Tên." },
-            { role: "assistant", content: "Bạn muốn nghỉ ngày nào?" },
-            { role: "user", content: "Không nghỉ ngày nào." },
-            { role: "assistant", content: "Có thể xếp một buổi ngắn mỗi ngày." },
-        ],
-    }), [
-        { role: "user", content: "15 phút mỗi ngày, luyện Gương mặt & Tên." },
-        { role: "assistant", content: "Bạn muốn nghỉ ngày nào?" },
-        { role: "user", content: "Không nghỉ ngày nào." },
-        { role: "assistant", content: "Có thể xếp một buổi ngắn mỗi ngày." },
+test("a coach response keeps the reply and fits its plan to the player's progress", () => {
+    const analysis = buildCoachAnalysis([
+        { gameName: "number", unlockedLevel: 2, played: 3, perfect: 0, totalItems: 30, totalCorrect: 21, bestLevel: null },
     ]);
-    assert.throws(() => parseCoachPlanMessages({
-        messages: [{ role: "assistant", content: "Không có yêu cầu người dùng." }],
-    }));
+    const result = parseCoachResponse(JSON.stringify({ reply: "  Đây là lộ trình.  ", plan: PLAN }), analysis);
+    assert.equal(result.reply, "Đây là lộ trình.");
+    assert.equal(result.plan?.sessions[0].level, 2);
+
+    assert.deepEqual(parseCoachResponse(JSON.stringify({ reply: "Bạn có bao nhiêu phút?", plan: null }), analysis), {
+        reply: "Bạn có bao nhiêu phút?",
+        plan: null,
+    });
+    // Plan hỏng không làm mất lời nhắn
+    assert.equal(parseCoachResponse(JSON.stringify({ reply: "OK", plan: { goal: "x" } }), analysis).plan, null);
+    assert.equal(parseCoachResponse(JSON.stringify({ reply: "x".repeat(5000) }), analysis).reply.length, 3000);
+
+    for (const raw of ["không phải JSON", JSON.stringify({ plan: PLAN }), JSON.stringify({ reply: "  " })]) {
+        assert.throws(
+            () => parseCoachResponse(raw, analysis),
+            (error: unknown) => error instanceof ApiError && error.statusCode === StatusCodes.BAD_GATEWAY,
+        );
+    }
 });
 
 test("coach chat trims valid messages and accepts a short conversation", () => {
@@ -84,7 +97,7 @@ test("Gemini sends the private API key in a header and formats coach history", a
     let requestBody: {
         systemInstruction?: { parts?: { text?: string }[] };
         contents?: { role: string; parts: { text: string }[] }[];
-        generationConfig?: { maxOutputTokens?: number; thinkingConfig?: unknown };
+        generationConfig?: { maxOutputTokens?: number; thinkingConfig?: unknown; responseMimeType?: string; responseSchema?: unknown };
     } | undefined;
     globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
         requestUrl = String(input);
@@ -100,13 +113,15 @@ test("Gemini sends the private API key in a header and formats coach history", a
             { role: "user", content: "Lập lịch tập" },
             { role: "assistant", content: "Bạn có bao nhiêu phút?" },
             { role: "user", content: "15 phút" },
-        ], { apiKey: "test-key-not-real", model: "gemini-test" });
+        ], { apiKey: "test-key-not-real", model: "gemini-test" }, COACH_RESPONSE_SCHEMA);
         assert.equal(reply, "Lộ trình phù hợp.");
         assert.equal(requestUrl, "https://generativelanguage.googleapis.com/v1beta/models/gemini-test:generateContent");
         assert.equal(new Headers(requestHeaders).get("x-goog-api-key"), "test-key-not-real");
         assert.equal(requestBody?.systemInstruction?.parts?.[0].text, "Tiến độ của tôi.");
         assert.deepEqual(requestBody?.contents?.map(({ role }) => role), ["user", "model", "user"]);
-        assert.equal(requestBody?.generationConfig?.maxOutputTokens, 1200);
+        assert.equal(requestBody?.generationConfig?.maxOutputTokens, 3000);
+        assert.equal(requestBody?.generationConfig?.responseMimeType, "application/json");
+        assert.deepEqual(requestBody?.generationConfig?.responseSchema, COACH_RESPONSE_SCHEMA);
         assert.equal(requestBody?.generationConfig?.thinkingConfig, undefined);
     } finally {
         globalThis.fetch = originalFetch;

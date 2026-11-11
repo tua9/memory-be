@@ -1,6 +1,8 @@
 import mongoose, { type Document } from "mongoose";
 import { DAILY_MINUTES_OPTIONS, TRAINING_GOALS, type DailyMinutes, type TrainingGoal } from "../config/preferences.js";
 import type { StreakState } from "../services/streak.service.js";
+import { CONFIGURED_GAME_NAMES } from "../config/games.js";
+import type { CoachPlan } from "../Agent/plan.service.js";
 
 export type UserStatus = "active" | "inactive" | "banned";
 export type UserRole = "user" | "admin";
@@ -24,8 +26,7 @@ export interface UserPreferences {
     skippedAt: Date | null;
 }
 
-export interface SavedCoachPlan {
-    content: string;
+export interface SavedCoachPlan extends CoachPlan {
     savedAt: Date;
 }
 
@@ -70,9 +71,24 @@ const userPreferencesSchema = new mongoose.Schema<UserPreferences>(
     { _id: false },
 );
 
+// Giới hạn chi tiết nằm ở Agent/plan.service (parsePlan); schema chỉ chặn dữ liệu hỏng
+const planSessionSchema = new mongoose.Schema(
+    {
+        day: { type: Number, required: true, min: 1, max: 7 },
+        minutes: { type: Number, required: true, min: 1 },
+        gameName: { type: String, enum: CONFIGURED_GAME_NAMES, required: true },
+        level: { type: Number, required: true, min: 1 },
+        targetAccuracy: { type: Number, required: true, min: 0, max: 100 },
+        tip: { type: String, required: true, maxlength: 200 },
+    },
+    { _id: false },
+);
+
 const savedCoachPlanSchema = new mongoose.Schema<SavedCoachPlan>(
     {
-        content: { type: String, required: true, trim: true, minlength: 1, maxlength: 3000 },
+        goal: { type: String, required: true, maxlength: 200 },
+        minutesPerDay: { type: Number, required: true, min: 1 },
+        sessions: { type: [planSessionSchema], required: true },
         savedAt: { type: Date, required: true },
     },
     { _id: false },

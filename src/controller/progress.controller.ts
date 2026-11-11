@@ -10,7 +10,6 @@ export const createProgressController = (
     getTimeline: RequestHandler;
     getCoach: RequestHandler;
     chat: RequestHandler;
-    generateCoachPlan: RequestHandler;
     getCoachPlan: RequestHandler;
     saveCoachPlan: RequestHandler;
 } => ({
@@ -33,13 +32,6 @@ export const createProgressController = (
     // POST /api/progress/coach/chat
     chat: asyncHandler(async (request, response) => {
         const result = await service.chat(requireUserId(request), request.body);
-        response.status(StatusCodes.OK).json({
-            status: "success",
-            data: result,
-        });
-    }),
-    generateCoachPlan: asyncHandler(async (request, response) => {
-        const result = await service.generateCoachPlan(requireUserId(request), request.body);
         response.status(StatusCodes.OK).json({
             status: "success",
             data: result,

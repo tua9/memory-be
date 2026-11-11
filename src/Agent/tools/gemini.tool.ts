@@ -4,6 +4,8 @@ import ApiError from "../../utils/ApiError.js";
 import type { CoachChatMessage } from "../types.js";
 
 const GEMINI_TIMEOUT_MS = 45_000;
+// Chặn phản hồi bất thường; câu trả lời hiển thị được giới hạn riêng ở chat.service
+const MAX_RAW_LENGTH = 12_000;
 
 interface GeminiResponse {
     candidates?: { content?: { parts?: { text?: unknown }[] } }[];
@@ -17,6 +19,7 @@ export const requestGemini = async (
     systemPrompt: string,
     messages: CoachChatMessage[],
     config: { apiKey: string; model: string } = { apiKey: env.GEMINI_API_KEY, model: env.GEMINI_MODEL },
+    responseSchema?: object,
 ): Promise<string> => {
     if (!config.apiKey) {
         throw new ApiError(StatusCodes.SERVICE_UNAVAILABLE, "Gemini chưa được cấu hình API key.");
@@ -40,7 +43,8 @@ export const requestGemini = async (
                     })),
                     generationConfig: {
                         temperature: 0.4,
-                        maxOutputTokens: 1200,
+                        maxOutputTokens: 3000,
+                        ...(responseSchema && { responseMimeType: "application/json", responseSchema }),
                     },
                 }),
                 signal: AbortSignal.timeout(GEMINI_TIMEOUT_MS),
@@ -80,7 +84,7 @@ export const requestGemini = async (
     if (!content) {
         throw new ApiError(StatusCodes.BAD_GATEWAY, "Gemini không trả về nội dung tư vấn.");
     }
-    if (content.length > 3000) {
+    if (content.length > MAX_RAW_LENGTH) {
         throw new ApiError(StatusCodes.BAD_GATEWAY, "Phản hồi từ Gemini vượt quá giới hạn cho phép.");
     }
     return content;

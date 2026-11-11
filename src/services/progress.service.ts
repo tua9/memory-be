@@ -13,18 +13,16 @@ import {
     type TimelineSession,
 } from "./timeline.service.js";
 import { progressTool } from "../Agent/tools/progress.tool.js";
-import { coachPlanTool } from "../Agent/tools/coachPlan.tool.js";
+import { coachPlanTool, type CoachPlanView } from "../Agent/tools/coachPlan.tool.js";
 import { coachChatService, type CoachChatService } from "../Agent/chat.service.js";
 import type { CoachAnalysis } from "../Agent/coach.service.js";
-import type { SavedCoachPlan } from "../models/user.js";
 
 export interface ProgressService {
     getTimeline(userId: string, query: unknown, now?: Date): Promise<Timeline>;
     getCoach(userId: string): Promise<CoachAnalysis>;
     chat(userId: string, rawBody: unknown): ReturnType<CoachChatService["chat"]>;
-    generateCoachPlan(userId: string, rawBody: unknown): ReturnType<CoachChatService["generatePlan"]>;
-    getCoachPlan(userId: string): Promise<SavedCoachPlan | null>;
-    saveCoachPlan(userId: string, rawBody: unknown): Promise<SavedCoachPlan>;
+    getCoachPlan(userId: string): Promise<CoachPlanView | null>;
+    saveCoachPlan(userId: string, rawBody: unknown): Promise<CoachPlanView>;
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -78,7 +76,6 @@ export const progressService: ProgressService = {
     getTimeline,
     getCoach: progressTool.getProgress,
     chat: coachChatService.chat,
-    generateCoachPlan: coachChatService.generatePlan,
     getCoachPlan: coachPlanTool.getSavedPlan,
     saveCoachPlan: coachPlanTool.savePlan,
 };

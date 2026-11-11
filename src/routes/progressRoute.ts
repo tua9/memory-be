@@ -14,7 +14,6 @@ export const createProgressRouter = (
     router.get("/timeline", authentication, controller.getTimeline);
     router.get("/coach", authentication, controller.getCoach);
     router.post("/coach/chat", authentication, coachChatIpLimiter, controller.chat);
-    router.post("/coach/plan/generate", authentication, coachChatIpLimiter, controller.generateCoachPlan);
     router.get("/coach/plan", authentication, controller.getCoachPlan);
     router.put("/coach/plan", authentication, controller.saveCoachPlan);
 

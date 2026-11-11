@@ -150,9 +150,17 @@ const getCoach: CoachService["getCoach"] = async (userId) => {
             .exec(),
     ]);
     const unlockedByGame = new Map(unlockedProgress.map((game) => [game.gameName, game.unlockedLevel]));
-    return buildCoachAnalysis(levelResults.map((game) => ({
-        ...game,
-        unlockedLevel: unlockedByGame.get(game.gameName) ?? 1,
+    const playedByGame = new Map(levelResults.map((game) => [game.gameName, game]));
+    // Cả game chưa chơi ván level nào cũng mang cấp đã mở thật, để lộ trình không bị ép về cấp 1
+    return buildCoachAnalysis(CONFIGURED_GAME_NAMES.map((gameName) => ({
+        played: 0,
+        perfect: 0,
+        totalItems: 0,
+        totalCorrect: 0,
+        bestLevel: null,
+        ...playedByGame.get(gameName),
+        gameName,
+        unlockedLevel: unlockedByGame.get(gameName) ?? 1,
     })));
 };
 
