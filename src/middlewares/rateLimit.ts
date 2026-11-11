@@ -28,3 +28,4 @@ const createIpLimiter = (limit: number) =>
 // /forgot gửi email nên chặt hơn; validate/confirm công khai nên vẫn cần chặn dò token và tốn CPU bcrypt.
 export const forgotPasswordIpLimiter = createIpLimiter(10);
 export const passwordResetIpLimiter = createIpLimiter(30);
+export const coachChatIpLimiter = createIpLimiter(20);

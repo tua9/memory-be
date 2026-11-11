@@ -24,6 +24,11 @@ export interface UserPreferences {
     skippedAt: Date | null;
 }
 
+export interface SavedCoachPlan {
+    content: string;
+    savedAt: Date;
+}
+
 export interface UserDocument extends Document {
     username: string;
     email: string;
@@ -36,6 +41,7 @@ export interface UserDocument extends Document {
     role: UserRole;
     progress: UserProgress;
     preferences?: UserPreferences;
+    coachPlan?: SavedCoachPlan | null;
 }
 
 const counter = () => ({ type: Number, default: 0, min: 0 });
@@ -60,6 +66,14 @@ const userPreferencesSchema = new mongoose.Schema<UserPreferences>(
         targetDate: { type: String, default: null },
         answeredAt: { type: Date, default: null },
         skippedAt: { type: Date, default: null },
+    },
+    { _id: false },
+);
+
+const savedCoachPlanSchema = new mongoose.Schema<SavedCoachPlan>(
+    {
+        content: { type: String, required: true, trim: true, minlength: 1, maxlength: 3000 },
+        savedAt: { type: Date, required: true },
     },
     { _id: false },
 );
@@ -105,6 +119,7 @@ const userSchema = new mongoose.Schema<UserDocument>(
         },
         progress: { type: userProgressSchema, default: () => ({}) },
         preferences: { type: userPreferencesSchema, default: () => ({}) },
+        coachPlan: { type: savedCoachPlanSchema, default: null },
     },
     { timestamps: true },
 );
