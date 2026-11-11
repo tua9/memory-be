@@ -9,6 +9,8 @@ export interface RoomPlayer {
     avatarUrl: string | null;
     ready: boolean;
     joinedAt: Date;
+    // Rời giữa trận: vẫn giữ trong danh sách tới hết trận để xếp cuối và tính cúp; trận mới thì bỏ ra
+    left: boolean;
 }
 
 export interface RoomAnswer {
@@ -52,8 +54,10 @@ export interface GameRoomDocument extends Document {
     matchId: Types.ObjectId;
     // Người thắng các trận đã xong trong phòng (userId hoặc "draw"), để hiện tỉ số chung khi chơi lại
     history: { winner: string; at: Date }[];
-    // Đủ người thì trận tự bắt đầu lúc này (30 giây sau khi người thứ hai vào); null khi chưa đủ người
+    // Từ 2 người trở lên và tất cả đã sẵn sàng: trận tự bắt đầu lúc này (5 giây sau); null khi chưa
     startsAt: Date | null;
+    // Chủ phòng đang tìm người chơi ngẫu nhiên: phòng mở cho ghép trận nhanh tới lúc này (60 giây, không gia hạn)
+    searchEndsAt: Date | null;
     revision: number;
     expiresAt: Date;
     createdAt: Date;
@@ -65,6 +69,7 @@ const playerSchema = new mongoose.Schema<RoomPlayer>({
     avatarUrl: { type: String, default: null },
     ready: { type: Boolean, default: false },
     joinedAt: { type: Date, required: true },
+    left: { type: Boolean, default: false },
 }, { _id: false });
 
 const schema = new mongoose.Schema<GameRoomDocument>({
@@ -81,6 +86,7 @@ const schema = new mongoose.Schema<GameRoomDocument>({
     matchId: { type: mongoose.Schema.Types.ObjectId, default: () => new mongoose.Types.ObjectId() },
     history: { type: mongoose.Schema.Types.Mixed, default: [] },
     startsAt: { type: Date, default: null },
+    searchEndsAt: { type: Date, default: null },
     revision: { type: Number, default: 0 },
     // Gia hạn mỗi khi phòng có thay đổi; phòng bỏ không 24 giờ thì tự xoá
     expiresAt: { type: Date, required: true },
@@ -88,5 +94,7 @@ const schema = new mongoose.Schema<GameRoomDocument>({
 
 schema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 schema.index({ "players.userId": 1 });
+// Ghép trận nhanh tìm phòng đang mở tìm người
+schema.index({ state: 1, searchEndsAt: 1 });
 
 export default mongoose.model<GameRoomDocument>("game_room", schema);

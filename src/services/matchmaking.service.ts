@@ -5,13 +5,13 @@ import MatchTicket, { type MatchTicket as Ticket } from "../models/matchTicket.j
 import UserGameProgress from "../models/userGameProgress.js";
 import type { UserDocument } from "../models/user.js";
 import ApiError from "../utils/ApiError.js";
-import { addPlayerToRoom, createMatchedRoom, hostSearchInfo } from "./gameRoom.service.js";
+import { addPlayerToRoom, createMatchedRoom, openRoomCodes } from "./gameRoom.service.js";
 import { getMaxLevel, parseGameName } from "./gameRules.service.js";
 
-// Ghép trận tự động. Người vào hàng sau đi ghép với người đang chờ trước.
-// - Vé thường: chọn một trò, hoặc "any" (bất kỳ trò nào). Ghép xong là có phòng hai người, tự bắt đầu sau 30 giây.
-// - Vé phòng: chủ phòng đang chờ tìm một người ngẫu nhiên; ai được ghép sẽ vào thẳng phòng đó.
-// Ưu tiên cùng trò và cấp đã mở gần nhất; vé "any" và vé phòng xếp sau theo thứ tự vào hàng.
+// Ghép trận nhanh: chọn một trò, hoặc "any" (bất kỳ trò nào).
+// 1. Vào ngẫu nhiên một phòng đang mở tìm người (chủ phòng bấm tìm, hoặc phòng ghép trận còn trong 60 giây đầu).
+// 2. Không có phòng nào thì ghép với người đang chờ trước mình thành phòng mới 5 chỗ, mở tìm thêm người 60 giây.
+// Ưu tiên cùng trò và cấp đã mở gần nhất; vé "any" xếp sau theo thứ tự vào hàng.
 const TICKET_TTL_MS = 30_000;
 const MATCHED_TTL_MS = 60_000;
 const MATCH_ROUNDS = 3;
@@ -21,14 +21,14 @@ export const ANY_GAME = "any";
 type Me = Pick<UserDocument, "_id" | "username" | "avatarUrl">;
 type Status =
     | { status: "idle" }
-    | { status: "searching"; gameName: string; since: Date; roomCode: string | null }
+    | { status: "searching"; gameName: string; since: Date }
     | { status: "matched"; code: string };
 
 const later = (ms: number) => new Date(Date.now() + ms);
 const asMe = (ticket: Pick<Ticket, "userId" | "username" | "avatarUrl">) =>
     ({ _id: ticket.userId, username: ticket.username, avatarUrl: ticket.avatarUrl }) as Me;
-const searching = (ticket: Pick<Ticket, "gameName" | "createdAt" | "hostRoomCode">): Status =>
-    ({ status: "searching", gameName: ticket.gameName, since: ticket.createdAt, roomCode: ticket.hostRoomCode ?? null });
+const searching = (ticket: Pick<Ticket, "gameName" | "createdAt">): Status =>
+    ({ status: "searching", gameName: ticket.gameName, since: ticket.createdAt });
 
 const matched = async (ticket: Pick<Ticket, "_id" | "roomCode">): Promise<Status> => {
     await MatchTicket.deleteOne({ _id: ticket._id });
@@ -40,12 +40,22 @@ const levelFor = async (userId: Ticket["userId"], gameName: ConfiguredGameName) 
     return Math.min(progress?.unlockedLevel ?? 1, getMaxLevel(gameName));
 };
 
-const isConflict = (error: unknown) => error instanceof ApiError && error.statusCode === StatusCodes.CONFLICT;
+// Vào ngẫu nhiên một phòng đang mở tìm người; phòng vừa đủ người hoặc vừa bắt đầu thì thử phòng khác
+const joinOpenRoom = async (me: Me, gameName: string): Promise<string | null> => {
+    const codes = await openRoomCodes(me, gameName === ANY_GAME ? null : gameName);
+    while (codes.length) {
+        const [code] = codes.splice(randomInt(codes.length), 1);
+        try {
+            return await addPlayerToRoom(code, me);
+        } catch (error) {
+            if (!(error instanceof ApiError)) throw error;
+        }
+    }
+    return null;
+};
 
 // Ghép hai vé thành một phòng và trả mã phòng
 const pair = async (mine: Ticket, other: Ticket, me: Me): Promise<string> => {
-    if (other.hostRoomCode) return addPlayerToRoom(other.hostRoomCode, me);
-    if (mine.hostRoomCode) return addPlayerToRoom(mine.hostRoomCode, asMe(other));
     const gameName = (mine.gameName !== ANY_GAME ? mine.gameName
         : other.gameName !== ANY_GAME ? other.gameName
         : CONFIGURED_GAME_NAMES[randomInt(CONFIGURED_GAME_NAMES.length)]) as ConfiguredGameName;
@@ -69,10 +79,13 @@ const attemptMatch = async (me: Me): Promise<Status> => {
     }
     const release = () => MatchTicket.updateOne({ _id: mine._id, state: "locked" }, { $set: { state: "searching" } });
     try {
+        const joined = await joinOpenRoom(me, mine.gameName);
+        if (joined) {
+            await MatchTicket.deleteOne({ _id: mine._id });
+            return { status: "matched", code: joined };
+        }
         const candidates = await MatchTicket.find({
             ...(mine.gameName === ANY_GAME ? {} : { gameName: { $in: [mine.gameName, ANY_GAME] } }),
-            // Hai phòng đang tìm người không ghép được với nhau
-            ...(mine.hostRoomCode ? { hostRoomCode: null } : {}),
             state: "searching", _id: { $lt: mine._id }, expiresAt: { $gt: new Date() },
         }).sort({ _id: 1 }).limit(CANDIDATES).lean();
         const distance = (other: Ticket) => (other.gameName === mine.gameName && mine.gameName !== ANY_GAME ? Math.abs(other.level - mine.level) : 100);
@@ -88,17 +101,7 @@ const attemptMatch = async (me: Me): Promise<Status> => {
                 await MatchTicket.deleteOne({ _id: mine._id });
                 return { status: "matched", code };
             } catch (error) {
-                // Phòng của người kia vừa đủ người hoặc đã bắt đầu: bỏ vé phòng đó, thử người tiếp theo
-                if (isConflict(error) && claimed.hostRoomCode) {
-                    await MatchTicket.deleteOne({ _id: claimed._id });
-                    continue;
-                }
                 await MatchTicket.updateOne({ _id: claimed._id, state: "locked" }, { $set: { state: "searching" } });
-                // Phòng của chính mình không còn chờ người: thôi tìm
-                if (isConflict(error) && mine.hostRoomCode) {
-                    await MatchTicket.deleteOne({ _id: mine._id });
-                    return { status: "idle" };
-                }
                 throw error;
             }
         }
@@ -110,7 +113,7 @@ const attemptMatch = async (me: Me): Promise<Status> => {
     return searching(mine);
 };
 
-const enqueue = async (me: Me, fields: { gameName: string; level: number; hostRoomCode: string | null }) => {
+const enqueue = async (me: Me, fields: { gameName: string; level: number }) => {
     const current = await MatchTicket.findOne({ userId: me._id }).lean();
     if (current?.state === "matched" && current.roomCode) return matched(current);
     if (current?.state === "locked") throw new ApiError(StatusCodes.CONFLICT, "Đang ghép trận, vui lòng thử lại");
@@ -132,15 +135,9 @@ const enqueue = async (me: Me, fields: { gameName: string; level: number; hostRo
 // Tìm trận nhanh: một trò cụ thể, hoặc "any" để ghép với người tìm bất kỳ trò nào
 export const findMatch = async (me: Me, raw: unknown): Promise<Status> => {
     const body = typeof raw === "object" && raw !== null ? raw as Record<string, unknown> : {};
-    if (body.gameName === ANY_GAME) return enqueue(me, { gameName: ANY_GAME, level: 1, hostRoomCode: null });
+    if (body.gameName === ANY_GAME) return enqueue(me, { gameName: ANY_GAME, level: 1 });
     const gameName = parseGameName(body.gameName);
-    return enqueue(me, { gameName, level: await levelFor(me._id as Ticket["userId"], gameName), hostRoomCode: null });
-};
-
-// Chủ phòng tìm một người chơi ngẫu nhiên vào phòng của mình (cùng trò với phòng, hoặc người tìm bất kỳ trò nào)
-export const findRoomPlayer = async (me: Me, code: string): Promise<Status> => {
-    const room = await hostSearchInfo(code, me);
-    return enqueue(me, { gameName: room.gameName, level: room.level, hostRoomCode: room.code });
+    return enqueue(me, { gameName, level: await levelFor(me._id as Ticket["userId"], gameName) });
 };
 
 // Client hỏi mỗi 2 giây: gia hạn vé, thử ghép lại, hoặc nhận mã phòng khi người khác đã ghép mình

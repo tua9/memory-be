@@ -3,7 +3,7 @@ import { protectedRoute } from "../middlewares/authMiddleware.js";
 import { codeEntryIpLimiter } from "../middlewares/rateLimit.js";
 import {
     cancelMatch, createRoom, findMatch, findRoomPlayer, finishRoom, joinRoom, kickPlayer, leaderboard, leaveRoom, nextRoom, readRoom,
-    pollMatch, readyRoom, recallRoom, rematchRoom, roomStats, startRoom, submitRoom,
+    pollMatch, readyRoom, recallRoom, rematchRoom, roomStats, submitRoom,
 } from "../controller/gameRoom.controller.js";
 
 const router = express.Router();
@@ -20,12 +20,11 @@ router.post("/:code/join", codeEntryIpLimiter, joinRoom);
 router.post("/:code/leave", leaveRoom);
 router.post("/:code/kick", kickPlayer);
 router.post("/:code/ready", readyRoom);
-router.post("/:code/start", startRoom);
 router.post("/:code/recall", recallRoom);
 router.post("/:code/submit", submitRoom);
 router.post("/:code/next", nextRoom);
 router.post("/:code/finish", finishRoom);
 router.post("/:code/rematch", rematchRoom);
-// Chủ phòng tìm một người chơi ngẫu nhiên vào phòng của mình
+// Chủ phòng bật/tắt tìm người chơi ngẫu nhiên cho phòng của mình (body { searching })
 router.post("/:code/find-player", findRoomPlayer);
 export default router;

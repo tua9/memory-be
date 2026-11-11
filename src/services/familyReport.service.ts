@@ -54,7 +54,8 @@ export const summarizeActivities = (activities: readonly Activity[]) => {
 
 // Số trận ba mẹ đã đấu cùng con trong phòng đấu, tính từ phía ba mẹ
 const togetherStats = async (guardianId: string, childId: string) => {
-    const results = await RoomResult.find({ userId: guardianId, opponentId: childId }).select("outcome").lean();
+    // Trận nhiều người lưu mọi đối thủ ở opponentIds; bản ghi cũ chỉ có opponentId
+    const results = await RoomResult.find({ userId: guardianId, $or: [{ opponentIds: childId }, { opponentId: childId }] }).select("outcome").lean();
     return {
         matches: results.length,
         wins: results.filter((item) => item.outcome === "win").length,
