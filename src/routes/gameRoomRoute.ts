@@ -2,7 +2,7 @@ import express from "express";
 import { protectedRoute } from "../middlewares/authMiddleware.js";
 import { codeEntryIpLimiter } from "../middlewares/rateLimit.js";
 import {
-    cancelMatch, createRoom, findMatch, finishRoom, joinRoom, kickPlayer, leaderboard, leaveRoom, nextRoom, readRoom,
+    cancelMatch, createRoom, findMatch, findRoomPlayer, finishRoom, joinRoom, kickPlayer, leaderboard, leaveRoom, nextRoom, readRoom,
     pollMatch, readyRoom, recallRoom, rematchRoom, roomStats, startRoom, submitRoom,
 } from "../controller/gameRoom.controller.js";
 
@@ -26,4 +26,6 @@ router.post("/:code/submit", submitRoom);
 router.post("/:code/next", nextRoom);
 router.post("/:code/finish", finishRoom);
 router.post("/:code/rematch", rematchRoom);
+// Chủ phòng tìm một người chơi ngẫu nhiên vào phòng của mình
+router.post("/:code/find-player", findRoomPlayer);
 export default router;

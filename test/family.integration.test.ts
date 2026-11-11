@@ -220,6 +220,34 @@ test("family links and game rooms on isolated MongoDB", { skip: !process.env.MON
             assert.equal(codes[0], codes[1]);
             assert.equal(outcome.filter((item) => item.status === "searching").length, 1);
             await MatchTicket.deleteMany({ userId: { $in: ids } });
+
+            // Bất kỳ trò nào: ghép với người đang tìm một trò cụ thể, phòng lấy trò của người kia
+            assert.equal((await matchmaking.findMatch(guardian, { gameName: "word" })).status, "searching");
+            const anyPair = await matchmaking.findMatch(child, { gameName: "any" });
+            assert.equal(anyPair.status, "matched");
+            const anyRoom = await rooms.getRoom((anyPair as { code: string }).code, child);
+            assert.equal(anyRoom.gameName, "word");
+            assert.equal(anyRoom.players.length, 2);
+            // Mỗi người chơi kèm số trận và số cúp của mình
+            assert.ok(anyRoom.players.every((player) => Number.isInteger(player.stats.matches) && Number.isInteger(player.stats.cups)));
+            assert.equal(anyRoom.players.find((player) => player._id === stranger._id.toString()), undefined);
+            await matchmaking.pollMatch(guardian);
+
+            // Chủ phòng tìm người ngẫu nhiên: người tìm cùng trò hoặc bất kỳ trò nào vào thẳng phòng đó
+            const own = await rooms.createRoom(stranger, { gameName: "image", mode: "level", gameLevel: 2, roundCount: 1 });
+            await assert.rejects(matchmaking.findRoomPlayer(child, own.code), /Không tìm thấy phòng|chủ phòng/);
+            const hosting = await matchmaking.findRoomPlayer(stranger, own.code);
+            assert.equal(hosting.status, "searching");
+            assert.equal((hosting as { roomCode: string }).roomCode, own.code);
+            // Khác trò thì không vào phòng này
+            assert.equal((await matchmaking.findMatch(child, { gameName: "card" })).status, "searching");
+            assert.deepEqual(await matchmaking.findMatch(guardian, { gameName: "any" }), { status: "matched", code: own.code });
+            const full = await rooms.getRoom(own.code, stranger);
+            assert.equal(full.players.length, 2);
+            assert.ok(full.startsAt);
+            assert.deepEqual(await matchmaking.pollMatch(stranger), { status: "matched", code: own.code });
+            await assert.rejects(matchmaking.findRoomPlayer(stranger, own.code), /đủ người/);
+            await MatchTicket.deleteMany({ userId: { $in: ids } });
         });
 
         await context.test("deleting an account removes its links, codes, invites and rooms", async () => {

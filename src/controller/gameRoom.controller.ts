@@ -20,6 +20,7 @@ export const roomStats = handle((request) => rooms.getRoomStats(meOf(request)));
 export const findMatch = handle((request) => matchmaking.findMatch(meOf(request), request.body));
 export const pollMatch = handle((request) => matchmaking.pollMatch(meOf(request)));
 export const cancelMatch = handle((request) => matchmaking.cancelMatch(meOf(request)));
+export const findRoomPlayer = handle((request) => matchmaking.findRoomPlayer(meOf(request), codeOf(request)));
 export const leaderboard = handle((request) => rooms.getLeaderboard(meOf(request)));
 export const rematchRoom = handle((request) => rooms.rematch(codeOf(request), meOf(request), request.body));
 export const readRoom = handle((request) => rooms.getRoom(codeOf(request), meOf(request)));

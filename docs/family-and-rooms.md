@@ -25,6 +25,10 @@ Các thao tác: `GET /:code`, `POST /:code/leave | kick { userId } | ready { rea
 
 **Ghép trận tự động.** `POST /api/rooms/matchmaking { gameName }` vào hàng chờ, `GET` (client hỏi mỗi 2 giây: giữ vé còn hạn và thử ghép lại), `DELETE` để huỷ. Trả `{ status: "idle" | "searching" | "matched", code? }`. Người vào hàng sau ghép với người chờ trước cùng trò, ưu tiên cấp đã mở gần nhất; người chờ trước làm chủ phòng; đề ở cấp thấp hơn của hai người, 3 vòng, thời gian ghi nhớ mặc định. Mỗi lượt ghép khoá vé của mình rồi mới khoá vé người kia (`match_queue.state`), và chỉ ghép với vé vào hàng trước mình, nên không ai bị ghép vào hai phòng. Vé không được hỏi lại trong 30 giây thì hết hạn.
 
+- **Bất kỳ trò nào:** gửi `gameName: "any"`. Vé "any" ghép được với mọi vé; vé một trò cụ thể ghép với cùng trò hoặc "any". Hai vé "any" gặp nhau thì phòng chọn ngẫu nhiên một trò.
+- **Chủ phòng tìm người ngẫu nhiên:** `POST /api/rooms/:code/find-player` (chủ phòng, phòng còn chờ và còn chỗ) đặt một vé phòng cùng trò với phòng. Người tìm trò đó hoặc "any" được ghép vào thẳng phòng này. Hỏi và huỷ dùng chung `GET`/`DELETE /api/rooms/matchmaking`; khi đang tìm, câu trả lời có `roomCode`. Có người vào phòng (kể cả bằng mã) hoặc chủ phòng rời phòng thì vé phòng tự bỏ.
+- **Giới thiệu người chơi:** mỗi người chơi trong dữ liệu phòng có `stats: { matches, cups }` (tổng số trận đã đấu và số cúp), đệm 30 giây và làm mới ngay khi có trận kết thúc.
+
 **Chơi lại.** Sau khi trận xong (hoặc bị dừng), chủ phòng gọi `POST /:code/rematch`: không gửi gì thì giữ trò và cài đặt cũ, gửi cài đặt như lúc tạo phòng thì đổi trò. Phòng về trạng thái chờ với những người đang ở đó (đều phải bấm sẵn sàng lại), mỗi trận có `matchId` riêng và `history` giữ người thắng các trận trước để hiện tỉ số chung. Client tiếp tục hỏi phòng (chậm hơn) sau khi trận xong để thấy trận mới.
 
 - Client hỏi phòng mỗi 2 giây. Server đối chiếu hạn giờ theo đồng hồ của mình và **chỉ ghi DB khi có thay đổi**.

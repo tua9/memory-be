@@ -153,6 +153,7 @@ const recordResults = async (room: GameRoomDocument) => {
             wins: mine.wins, losses: mine.losses, draws: mine.draws, cups: cupFor === id ? 1 : 0, completedAt: new Date(),
         };
     });
+    ids.forEach((id) => statsCache.delete(id));
     try {
         await RoomResult.insertMany(docs, { ordered: false });
     } catch (error) {
@@ -277,7 +278,36 @@ const view = (room: GameRoomDocument, me: Me) => {
     };
 };
 
-export type RoomView = ReturnType<typeof view>;
+// Giới thiệu ngắn về người chơi (số trận, số cúp) để hai bên biết mình đấu với ai.
+// shortcut: đệm trong bộ nhớ 30 giây theo từng tiến trình, đủ cho một máy chủ; nhiều máy chủ thì chuyển sang lưu sẵn tổng.
+const STATS_TTL_MS = 30_000;
+const statsCache = new Map<string, { at: number; matches: number; cups: number }>();
+
+const statsOf = async (ids: string[]) => {
+    const now = Date.now();
+    const missing = ids.filter((id) => (statsCache.get(id)?.at ?? 0) + STATS_TTL_MS < now);
+    if (missing.length) {
+        const rows = await RoomResult.aggregate<{ _id: Types.ObjectId; matches: number; cups: number }>()
+            .match({ userId: { $in: missing.map((id) => new Types.ObjectId(id)) } })
+            .group({ _id: "$userId", matches: { $sum: 1 }, cups: { $sum: "$cups" } });
+        for (const id of missing) {
+            const row = rows.find((item) => idOf(item._id) === id);
+            statsCache.set(id, { at: now, matches: row?.matches ?? 0, cups: row?.cups ?? 0 });
+        }
+    }
+    return Object.fromEntries(ids.map((id) => {
+        const entry = statsCache.get(id);
+        return [id, { matches: entry?.matches ?? 0, cups: entry?.cups ?? 0 }];
+    }));
+};
+
+const present = async (room: GameRoomDocument, me: Me) => {
+    const shown = view(room, me);
+    const stats = await statsOf(shown.players.map((player) => player._id));
+    return { ...shown, players: shown.players.map((player) => ({ ...player, stats: stats[player._id] })) };
+};
+
+export type RoomView = Awaited<ReturnType<typeof present>>;
 
 const playerOf = (me: Me) => ({
     userId: me._id as Types.ObjectId, username: me.username, avatarUrl: me.avatarUrl ?? null, ready: false, joinedAt: new Date(),
@@ -315,31 +345,52 @@ const insertRoom = async (host: Me, guests: Me[], raw: unknown) => {
     throw conflict("Chưa tạo được mã phòng, vui lòng thử lại");
 };
 
-export const createRoom = async (me: Me, raw: unknown) => view(await insertRoom(me, [], raw), me);
+export const createRoom = async (me: Me, raw: unknown) => present(await insertRoom(me, [], raw), me);
 
 // Phòng cho hai người vừa được ghép trận: đủ người sẵn, trận tự bắt đầu sau 30 giây
 export const createMatchedRoom = async (host: Me, guest: Me, raw: unknown) => (await insertRoom(host, [guest], raw)).code;
 
-export const getRoom = async (code: string, me: Me) => view(await mutate(code, me, () => undefined), me);
+export const getRoom = async (code: string, me: Me) => present(await mutate(code, me, () => undefined), me);
 
-export const joinRoom = async (code: string, me: Me) => view(await mutate(code, me, (room, now, meId) => {
-    if (isPlayer(room, meId)) return;
-    if (room.state !== "waiting") throw conflict("Trận đấu đã bắt đầu hoặc đã kết thúc");
+export const joinRoom = async (code: string, me: Me) => {
+    const room = await mutate(code, me, (room, now, meId) => {
+        if (isPlayer(room, meId)) return;
+        if (room.state !== "waiting") throw conflict("Trận đấu đã bắt đầu hoặc đã kết thúc");
+        if (room.players.length >= room.capacity) throw conflict("Phòng đã đủ người");
+        room.players.push(playerOf(me));
+        armCountdown(room, now);
+    }, { memberOnly: false });
+    // Phòng đã đủ người (ví dụ có người nhập mã) thì thôi tìm người chơi ngẫu nhiên cho phòng này.
+    // Vé đang được khoá là vé đang ghép chính người này: để luồng ghép trận tự đánh dấu "đã ghép".
+    if (room.players.length >= room.capacity) await MatchTicket.deleteMany({ hostRoomCode: room.code, state: "searching" });
+    return present(room, me);
+};
+
+// Đưa người vừa được ghép vào phòng của chủ phòng đang tìm người chơi ngẫu nhiên
+export const addPlayerToRoom = async (code: string, player: Me) => (await joinRoom(code, player)).code;
+
+// Chủ phòng tìm người chơi ngẫu nhiên: chỉ khi phòng còn chờ và còn chỗ
+export const hostSearchInfo = async (code: string, me: Me) => {
+    const room = await findRoom(code);
+    if (!isHost(room, idOf(me._id))) throw forbidden("Chỉ chủ phòng mới tìm người chơi được");
+    if (room.state !== "waiting") throw conflict("Trận đấu đã bắt đầu");
     if (room.players.length >= room.capacity) throw conflict("Phòng đã đủ người");
-    room.players.push(playerOf(me));
-    armCountdown(room, now);
-}, { memberOnly: false }), me);
+    return { code: room.code, gameName: room.gameName, level: room.rules.gameLevel ?? 1 };
+};
 
 // Rời phòng lúc chờ hoặc sau khi trận xong. Chủ phòng rời thì phòng đóng; khách rời thì chỗ trống cho người khác vào.
-export const leaveRoom = async (code: string, me: Me) => view(await mutate(code, me, (room, now, meId) => {
+export const leaveRoom = async (code: string, me: Me) => present(await mutate(code, me, (room, now, meId) => {
     if (room.state !== "waiting" && room.state !== "completed" && room.state !== "cancelled") throw conflict("Trận đấu đang diễn ra");
     // Chủ phòng cũng ra khỏi danh sách để người còn lại thấy chủ phòng đã đi, không chờ trận mới
-    if (isHost(room, meId)) room.state = "cancelled";
+    if (isHost(room, meId)) {
+        room.state = "cancelled";
+        void MatchTicket.deleteMany({ hostRoomCode: room.code }).catch(() => undefined);
+    }
     room.players = room.players.filter((player) => idOf(player.userId) !== meId);
     armCountdown(room, now);
 }), me);
 
-export const kickPlayer = async (code: string, me: Me, raw: unknown) => view(await mutate(code, me, (room, now, meId) => {
+export const kickPlayer = async (code: string, me: Me, raw: unknown) => present(await mutate(code, me, (room, now, meId) => {
     assertHost(room, meId, "Chỉ chủ phòng mới mời người chơi ra");
     if (room.state !== "waiting") throw conflict("Trận đấu đang diễn ra");
     const target = asObject(raw).userId;
@@ -348,21 +399,21 @@ export const kickPlayer = async (code: string, me: Me, raw: unknown) => view(awa
     armCountdown(room, now);
 }), me);
 
-export const setReady = async (code: string, me: Me, raw: unknown) => view(await mutate(code, me, (room, now, meId) => {
+export const setReady = async (code: string, me: Me, raw: unknown) => present(await mutate(code, me, (room, now, meId) => {
     if (room.state !== "waiting") throw conflict("Trận đấu đã bắt đầu");
     const player = room.players.find((item) => idOf(item.userId) === meId);
     if (player) player.ready = asObject(raw).ready !== false;
     if (room.players.length >= room.capacity && room.players.every((item) => item.ready)) beginMatch(room, now);
 }), me);
 
-export const startRoom = async (code: string, me: Me) => view(await mutate(code, me, (room, now, meId) => {
+export const startRoom = async (code: string, me: Me) => present(await mutate(code, me, (room, now, meId) => {
     assertHost(room, meId, "Chỉ chủ phòng mới bắt đầu được");
     if (room.state !== "waiting") throw conflict("Trận đấu đã bắt đầu");
     if (room.players.length < room.capacity || !room.players.every((player) => player.ready)) throw conflict("Cần đủ người và tất cả đã sẵn sàng");
     beginMatch(room, now);
 }), me);
 
-export const enterRecallPhase = async (code: string, me: Me) => view(await mutate(code, me, (room, now, meId) => {
+export const enterRecallPhase = async (code: string, me: Me) => present(await mutate(code, me, (room, now, meId) => {
     if (room.state !== "memorizing" && room.state !== "recalling") throw conflict("Vòng đấu chưa diễn ra");
     const round = room.rounds[room.roundIndex];
     if (!round?.answers[meId]) throw conflict("Không tìm thấy vòng đấu");
@@ -370,7 +421,7 @@ export const enterRecallPhase = async (code: string, me: Me) => view(await mutat
     if (Object.values(round.answers).every((answer) => answer.enteredRecallAt)) room.state = "recalling";
 }), me);
 
-export const submitAnswers = async (code: string, me: Me, raw: unknown) => view(await mutate(code, me, (room, now, meId) => {
+export const submitAnswers = async (code: string, me: Me, raw: unknown) => present(await mutate(code, me, (room, now, meId) => {
     if (room.state !== "memorizing" && room.state !== "recalling") throw conflict("Vòng đấu đã kết thúc");
     const round = room.rounds[room.roundIndex];
     const player = round?.answers[meId];
@@ -389,7 +440,7 @@ export const submitAnswers = async (code: string, me: Me, raw: unknown) => view(
     finishRoundIfReady(room, round);
 }), me);
 
-export const nextRound = async (code: string, me: Me) => view(await mutate(code, me, (room, now, meId) => {
+export const nextRound = async (code: string, me: Me) => present(await mutate(code, me, (room, now, meId) => {
     assertHost(room, meId, "Chỉ chủ phòng mới chuyển vòng được");
     if (room.state !== "round_result" || room.roundIndex + 1 >= room.roundCount) throw conflict("Không còn vòng tiếp theo");
     room.rounds.push(makeRound(room, now));
@@ -398,7 +449,7 @@ export const nextRound = async (code: string, me: Me) => view(await mutate(code,
 }), me);
 
 // Kết thúc sau vòng cuối là hoàn thành trận; kết thúc giữa chừng là huỷ trận
-export const finishRoom = async (code: string, me: Me) => view(await mutate(code, me, (room, _now, meId) => {
+export const finishRoom = async (code: string, me: Me) => present(await mutate(code, me, (room, _now, meId) => {
     assertHost(room, meId, "Chỉ chủ phòng mới kết thúc được");
     if (room.state === "completed" || room.state === "cancelled") return;
     room.state = room.state === "round_result" && room.rounds.length === room.roundCount ? "completed" : "cancelled";
@@ -409,7 +460,7 @@ export const finishRoom = async (code: string, me: Me) => view(await mutate(code
 export const rematch = async (code: string, me: Me, raw: unknown) => {
     const body = asObject(raw);
     const setup = body.gameName === undefined ? null : parseSetup(body);
-    return view(await mutate(code, me, (room, now, meId) => {
+    return present(await mutate(code, me, (room, now, meId) => {
         assertHost(room, meId, "Chỉ chủ phòng mới mở trận mới");
         if (room.state !== "completed" && room.state !== "cancelled") throw conflict("Trận hiện tại chưa kết thúc");
         if (setup) Object.assign(room, setup);
