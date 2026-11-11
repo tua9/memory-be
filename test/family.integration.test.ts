@@ -76,118 +76,109 @@ test("family links and game rooms on isolated MongoDB", { skip: !process.env.MON
             assert.match(report.suggestions[0].reason, /9-12/);
         });
 
-        await context.test("anyone can host or join a two-player room; polling does not write", async () => {
-            const created = await rooms.createRoom(stranger, { gameName: "card", mode: "level", gameLevel: 3, roundCount: 1 });
+        await context.test("rooms hold 2 to 5 players; when everyone is ready the match starts 5 seconds later", async () => {
+            const setup = { gameName: "number", mode: "level", gameLevel: 1, roundCount: 1 };
+            await assert.rejects(rooms.createRoom(stranger, { ...setup, capacity: 6 }), /từ 2 đến 5/);
+            const created = await rooms.createRoom(stranger, { ...setup, capacity: 3 });
             const code = created.code;
             assert.equal(created.isHost, true);
+            assert.equal(created.capacity, 3);
+            // Phòng tự tạo không đếm ngược và không mở cho ghép trận nhanh
+            assert.equal(created.searchEndsAt, null);
             await assert.rejects(rooms.getRoom(code, guardian), /Không tìm thấy phòng/);
             await rooms.joinRoom(code, guardian);
-            await assert.rejects(rooms.joinRoom(code, child), /đủ người/);
-            await assert.rejects(rooms.startRoom(code, stranger), /sẵn sàng/);
-            await assert.rejects(rooms.startRoom(code, guardian), /chủ phòng/);
-            // Đủ hai người thì có hẹn giờ tự bắt đầu; cả hai sẵn sàng thì vào trận ngay
-            const ready = await rooms.setReady(code, stranger, {});
-            assert.ok(ready.startsAt && new Date(ready.startsAt).getTime() - Date.now() > 25_000);
-            const started = await rooms.setReady(code, guardian, {});
+            assert.equal((await rooms.setReady(code, stranger, {})).startsAt, null);
+            const twoReady = await rooms.setReady(code, guardian, {});
+            const wait = new Date(twoReady.startsAt!).getTime() - Date.now();
+            assert.ok(wait > 3_000 && wait <= 5_000, String(wait));
+            // Người mới vào chưa sẵn sàng thì huỷ hẹn giờ; sẵn sàng thì hẹn lại
+            assert.equal((await rooms.joinRoom(code, child)).startsAt, null);
+            assert.ok((await rooms.setReady(code, child, {})).startsAt);
+            await GameRoom.updateOne({ code }, { $set: { startsAt: new Date(Date.now() - 1_000) } });
+            const started = await rooms.getRoom(code, child);
             assert.equal(started.state, "memorizing");
-            assert.equal(started.startsAt, null);
             assert.equal(started.round?.items?.length, started.rules.totalItems);
             const revision = (await rooms.getRoom(code, guardian)).revision;
             assert.equal((await rooms.getRoom(code, stranger)).revision, revision);
 
-            const answers = started.round!.items!.map((item) => item.code);
-            const hidden = await rooms.enterRecallPhase(code, guardian);
-            assert.equal(hidden.round?.items, undefined);
-            await rooms.enterRecallPhase(code, stranger);
-            await rooms.submitAnswers(code, stranger, { answers });
-            // Nộp ngay sau khi hết giờ vẫn được nhận nhờ thời gian gia hạn
-            const late = new Date(Date.now() - 1_000);
-            await GameRoom.updateOne({ code }, { $set: { "rounds.0.memorizeEndsAt": late, "rounds.0.recallEndsAt": late } });
-            const result = await rooms.submitAnswers(code, guardian, { answers });
+            // Chủ phòng rời giữa trận: người vào sớm nhất còn lại làm chủ phòng, trận chơi tiếp
+            const digits = started.round!.items!.map((item) => item.code);
+            await rooms.leaveRoom(code, stranger);
+            const playing = await rooms.getRoom(code, guardian);
+            assert.equal(playing.isHost, true);
+            assert.equal(playing.state, "memorizing");
+            assert.equal(playing.players.find((player) => player._id === stranger._id.toString())?.left, true);
+            await rooms.enterRecallPhase(code, guardian);
+            await rooms.enterRecallPhase(code, child);
+            await rooms.submitAnswers(code, guardian, { answers: digits });
+            // Có trả lời nhưng sai hết: vẫn tính là có thi đấu
+            const result = await rooms.submitAnswers(code, child, { answers: digits.map((digit) => String((Number(digit) + 1) % 10)) });
             assert.equal(result.state, "round_result");
             assert.equal(result.round?.result?.players.length, 2);
-            assert.ok(result.round?.result?.players.every((player) => player.correct === player.total && player.marks.every(Boolean)));
-            const done = await rooms.finishRoom(code, stranger);
+            await assert.rejects(rooms.finishRoom(code, child), /chủ phòng/);
+            const done = await rooms.finishRoom(code, guardian);
             assert.equal(done.state, "completed");
-            assert.equal(done.history.length, 1);
-            await rooms.finishRoom(code, stranger);
-            const firstMatch = (await GameRoom.findOne({ code }))!.matchId;
-            assert.equal(await RoomResult.countDocuments({ roomId: firstMatch }), 2);
-            // Hoà thì không ai có cúp; có người thắng thì đúng người đó có 1 cúp
-            const cupsAfterFirst = (await rooms.getRoomStats(stranger)).cups + (await rooms.getRoomStats(guardian)).cups;
-            assert.equal(cupsAfterFirst, done.cupWinnerId ? 1 : 0);
-
-            // Chơi lại trong cùng phòng, đổi sang trò Ghi nhớ số: chỉ chủ phòng mở được
-            await assert.rejects(rooms.rematch(code, guardian, {}), /chủ phòng/);
-            const again = await rooms.rematch(code, stranger, { gameName: "number", mode: "level", gameLevel: 1, roundCount: 1 });
-            assert.equal(again.state, "waiting");
-            assert.equal(again.gameName, "number");
-            assert.equal(again.players.length, 2);
-            assert.ok(again.players.every((player) => !player.ready));
-            await rooms.setReady(code, stranger, {});
-            const second = await rooms.setReady(code, guardian, {});
-            const digits = second.round!.items!.map((item) => item.code);
-            await rooms.enterRecallPhase(code, stranger);
-            await rooms.enterRecallPhase(code, guardian);
-            await rooms.submitAnswers(code, stranger, { answers: digits });
-            // Có trả lời nhưng sai hết: vẫn tính là có tham gia nên trận vẫn được trao cúp
-            await rooms.submitAnswers(code, guardian, { answers: digits.map((digit) => String((Number(digit) + 1) % 10)) });
-            const won = await rooms.finishRoom(code, stranger);
-            assert.equal(won.cupWinnerId, stranger._id.toString());
-            assert.equal(won.history.length, 2);
-            assert.equal(won.history[1].winner, stranger._id.toString());
-            assert.notEqual((await GameRoom.findOne({ code }))!.matchId.toString(), firstMatch.toString());
-            assert.equal((await rooms.getRoomStats(stranger)).matches, 2);
-            assert.equal((await rooms.getRoomStats(stranger)).cups + (await rooms.getRoomStats(guardian)).cups, cupsAfterFirst + 1);
-
-            const board = await rooms.getLeaderboard(stranger);
+            assert.equal(done.history[0].winner, guardian._id.toString());
+            // 3 người: hạng 1 +2, hạng 2 giữ nguyên, người rời trận xếp cuối -1
+            const standing = Object.fromEntries(done.players.map((player) => [player.username, [player.place, player.cups]]));
+            assert.deepEqual(standing, { me: [1, 2], con: [2, 0], "nguoi-la": [3, -1] });
+            const matchId = (await GameRoom.findOne({ code }))!.matchId;
+            assert.equal(await RoomResult.countDocuments({ roomId: matchId }), 3);
+            assert.equal((await rooms.getRoomStats(stranger)).cups, -1);
+            assert.equal((await rooms.getRoomStats(guardian)).cups, 2);
+            const overview = (await import("../src/services/familyReport.service.js")).getChildOverview;
+            assert.equal((await overview(guardian._id.toString(), child, null)).together.matches, 1);
+            const board = await rooms.getLeaderboard(guardian);
             const mine = board.entries.find((entry) => entry.isMe);
-            assert.ok(mine && mine.cups >= 1);
+            assert.ok(mine && mine.cups === 2);
             assert.equal(board.me.rank, mine.rank);
 
-            // Khách rời phòng sau trận: chủ phòng còn một mình, mở trận mới thì người khác vào được
-            await rooms.leaveRoom(code, guardian);
-            const alone = await rooms.rematch(code, stranger, {});
-            assert.equal(alone.players.length, 1);
-            await rooms.joinRoom(code, child);
+            // Chơi lại: chỉ chủ phòng mở được, người đã rời không vào trận mới
+            await assert.rejects(rooms.rematch(code, child, {}), /chủ phòng/);
+            const again = await rooms.rematch(code, guardian, { gameName: "card", mode: "level", gameLevel: 1, roundCount: 1 });
+            assert.equal(again.state, "waiting");
+            assert.equal(again.gameName, "card");
+            assert.deepEqual(again.players.map((player) => player.username).sort(), ["con", "me"]);
+            assert.ok(again.players.every((player) => !player.ready && !player.left));
 
             // Phòng đấu không đụng tới tiến độ cá nhân
             assert.equal(await GameSession.countDocuments({ userId: { $in: ids } }), 0);
             assert.equal(await UserGameProgress.countDocuments({ userId: { $in: ids } }), 0);
         });
 
-        await context.test("a missing answer is filled after the grace period; the host leaving cancels", async () => {
+        await context.test("blank answers are filled after the grace period; the last player left ends the match", async () => {
             const { code } = await rooms.createRoom(guardian, { gameName: "number", mode: "level", gameLevel: 1, roundCount: 2 });
             await rooms.joinRoom(code, child);
-            // Không ai bấm sẵn sàng: hết 30 giây thì trận tự bắt đầu
+            await rooms.setReady(code, guardian, {});
+            await rooms.setReady(code, child, {});
             await GameRoom.updateOne({ code }, { $set: { startsAt: new Date(Date.now() - 1_000) } });
             assert.equal((await rooms.getRoom(code, child)).state, "memorizing");
             const expired = new Date(Date.now() - 10_000);
             await GameRoom.updateOne({ code }, { $set: { "rounds.0.memorizeEndsAt": expired, "rounds.0.recallEndsAt": expired } });
             const timeout = await rooms.getRoom(code, child);
             assert.equal(timeout.round?.result?.outcome, "draw");
-            await rooms.finishRoom(code, guardian);
-            assert.equal((await rooms.getRoom(code, child)).state, "cancelled");
-            const overview = (await import("../src/services/familyReport.service.js")).getChildOverview;
-            assert.equal((await overview(guardian._id.toString(), child, null)).together.matches, 0);
+            // Không dừng giữa chừng được: ai muốn thôi thì rời trận
+            await assert.rejects(rooms.finishRoom(code, guardian), /vòng cuối/);
+            await rooms.leaveRoom(code, guardian);
+            const end = await rooms.getRoom(code, child);
+            assert.equal(end.state, "completed");
+            assert.equal(end.isHost, true);
+            // Không ai thi đấu thật (bài trắng) nên không ai được cộng; người rời vẫn bị trừ
+            assert.deepEqual(Object.fromEntries(end.players.map((player) => [player.username, player.cups])), { me: -1, con: 0 });
 
+            // Phòng đang chờ: chủ phòng rời thì người còn lại làm chủ; người cuối cùng rời thì phòng đóng
             const waiting = await rooms.createRoom(child, { gameName: "card", mode: "level", gameLevel: 1, roundCount: 1 });
             await rooms.joinRoom(waiting.code, stranger);
-            const alone = await rooms.leaveRoom(waiting.code, stranger);
-            // Còn một người thì huỷ hẹn giờ bắt đầu
-            assert.equal(alone.startsAt, null);
-            assert.equal((await rooms.getRoom(waiting.code, child)).players.length, 1);
-            await rooms.joinRoom(waiting.code, stranger);
-            const closed = await rooms.leaveRoom(waiting.code, child);
-            assert.equal(closed.state, "cancelled");
-            // Người còn lại thấy phòng đã đóng và chủ phòng không còn trong phòng
-            const left = await rooms.getRoom(waiting.code, stranger);
-            assert.equal(left.state, "cancelled");
-            assert.ok(left.players.every((player) => !player.isHost));
+            await rooms.leaveRoom(waiting.code, child);
+            const moved = await rooms.getRoom(waiting.code, stranger);
+            assert.equal(moved.state, "waiting");
+            assert.equal(moved.isHost, true);
+            assert.equal(moved.players.length, 1);
             await assert.rejects(rooms.getRoom(waiting.code, child), /Không tìm thấy phòng/);
+            assert.equal((await rooms.leaveRoom(waiting.code, stranger)).state, "cancelled");
         });
 
-        await context.test("matchmaking pairs two searchers of the same game into a room that starts in 30 seconds", async () => {
+        await context.test("quick match joins an open room at random, otherwise pairs searchers into a 5-seat room", async () => {
             assert.deepEqual(await matchmaking.pollMatch(child), { status: "idle" });
             assert.equal((await matchmaking.findMatch(child, { gameName: "card" })).status, "searching");
             // Khác trò thì không ghép
@@ -199,26 +190,40 @@ test("family links and game rooms on isolated MongoDB", { skip: !process.env.MON
             assert.deepEqual(await matchmaking.pollMatch(child), { status: "idle" });
             const room = await rooms.getRoom(code, child);
             assert.equal(room.players.length, 2);
+            assert.equal(room.capacity, 5);
             assert.equal(room.isHost, true);
-            assert.equal(room.state, "waiting");
-            assert.ok(room.startsAt && new Date(room.startsAt).getTime() - Date.now() > 25_000);
+            assert.equal(room.startsAt, null);
             assert.equal(room.rules.gameLevel, 1);
+            // Phòng ghép còn mở 60 giây: người tìm cùng trò vào thẳng phòng này
+            assert.ok(room.searchEndsAt && new Date(room.searchEndsAt).getTime() - Date.now() > 55_000);
+            assert.deepEqual(await matchmaking.findMatch(guardian, { gameName: "card" }), { status: "matched", code });
+            assert.equal((await rooms.getRoom(code, child)).players.length, 3);
+            // Chủ phòng thôi tìm thì phòng không nhận người ghép nhanh nữa
+            assert.equal((await rooms.setSearching(code, child, { searching: false })).searchEndsAt, null);
 
             // Huỷ tìm trận
             await matchmaking.findMatch(guardian, { gameName: "number" });
             assert.deepEqual(await matchmaking.cancelMatch(guardian), { status: "idle" });
             assert.deepEqual(await matchmaking.pollMatch(guardian), { status: "idle" });
 
-            // Ba người tìm cùng lúc: đúng hai người vào chung một phòng, người còn lại vẫn chờ
-            const first = await matchmaking.findMatch(guardian, { gameName: "image" });
-            const racing = await Promise.all([matchmaking.findMatch(child, { gameName: "image" }), matchmaking.findMatch(stranger, { gameName: "image" })]);
-            const polled = await Promise.all([guardian, child, stranger].map((user) => matchmaking.pollMatch(user)));
-            // Mã phòng đến từ câu trả lời lúc tìm (người ghép người khác) hoặc lúc hỏi lại (người được ghép)
-            const outcome = [first, ...racing].map((item, index) => item.status === "matched" ? item : polled[index]);
-            const codes = outcome.filter((item) => item.status === "matched").map((item) => (item as { code: string }).code);
-            assert.equal(codes.length, 2, JSON.stringify(outcome));
-            assert.equal(codes[0], codes[1]);
-            assert.equal(outcome.filter((item) => item.status === "searching").length, 1);
+            // Phòng tự tạo: bấm tìm người chơi thì mở 60 giây, bấm lại không gia hạn
+            const own = await rooms.createRoom(stranger, { gameName: "image", mode: "level", gameLevel: 2, roundCount: 1, capacity: 4 });
+            await assert.rejects(rooms.setSearching(own.code, child, {}), /Không tìm thấy phòng/);
+            const hosting = await rooms.setSearching(own.code, stranger, {});
+            const window = new Date(hosting.searchEndsAt!).getTime() - Date.now();
+            assert.ok(window > 55_000 && window <= 60_000, String(window));
+            const again = await rooms.setSearching(own.code, stranger, {});
+            assert.equal(new Date(again.searchEndsAt!).getTime(), new Date(hosting.searchEndsAt!).getTime());
+            // Khác trò thì không vào phòng này; bất kỳ trò nào thì vào
+            assert.equal((await matchmaking.findMatch(child, { gameName: "word" })).status, "searching");
+            assert.deepEqual(await matchmaking.findMatch(guardian, { gameName: "any" }), { status: "matched", code: own.code });
+            const joined = await rooms.getRoom(own.code, stranger);
+            assert.equal(joined.players.length, 2);
+            assert.equal(new Date(joined.searchEndsAt!).getTime(), new Date(hosting.searchEndsAt!).getTime());
+            // Hết 60 giây: phòng thôi nhận người ghép nhanh
+            await GameRoom.updateOne({ code: own.code }, { $set: { searchEndsAt: new Date(Date.now() - 1_000) } });
+            await matchmaking.cancelMatch(child);
+            assert.equal((await matchmaking.findMatch(child, { gameName: "image" })).status, "searching");
             await MatchTicket.deleteMany({ userId: { $in: ids } });
 
             // Bất kỳ trò nào: ghép với người đang tìm một trò cụ thể, phòng lấy trò của người kia
@@ -232,21 +237,18 @@ test("family links and game rooms on isolated MongoDB", { skip: !process.env.MON
             assert.ok(anyRoom.players.every((player) => Number.isInteger(player.stats.matches) && Number.isInteger(player.stats.cups)));
             assert.equal(anyRoom.players.find((player) => player._id === stranger._id.toString()), undefined);
             await matchmaking.pollMatch(guardian);
+            await rooms.setSearching(anyRoom.code, guardian, { searching: false });
 
-            // Chủ phòng tìm người ngẫu nhiên: người tìm cùng trò hoặc bất kỳ trò nào vào thẳng phòng đó
-            const own = await rooms.createRoom(stranger, { gameName: "image", mode: "level", gameLevel: 2, roundCount: 1 });
-            await assert.rejects(matchmaking.findRoomPlayer(child, own.code), /Không tìm thấy phòng|chủ phòng/);
-            const hosting = await matchmaking.findRoomPlayer(stranger, own.code);
-            assert.equal(hosting.status, "searching");
-            assert.equal((hosting as { roomCode: string }).roomCode, own.code);
-            // Khác trò thì không vào phòng này
-            assert.equal((await matchmaking.findMatch(child, { gameName: "card" })).status, "searching");
-            assert.deepEqual(await matchmaking.findMatch(guardian, { gameName: "any" }), { status: "matched", code: own.code });
-            const full = await rooms.getRoom(own.code, stranger);
-            assert.equal(full.players.length, 2);
-            assert.ok(full.startsAt);
-            assert.deepEqual(await matchmaking.pollMatch(stranger), { status: "matched", code: own.code });
-            await assert.rejects(matchmaking.findRoomPlayer(stranger, own.code), /đủ người/);
+            // Ba người tìm cùng lúc: hai người ghép thành phòng, người thứ ba vào luôn phòng đang mở đó
+            const first = await matchmaking.findMatch(guardian, { gameName: "facename" });
+            const racing = await Promise.all([matchmaking.findMatch(child, { gameName: "facename" }), matchmaking.findMatch(stranger, { gameName: "facename" })]);
+            const polled = await Promise.all([guardian, child, stranger].map((user) => matchmaking.pollMatch(user)));
+            // Mã phòng đến từ câu trả lời lúc tìm (người ghép người khác) hoặc lúc hỏi lại (người được ghép)
+            const outcome = [first, ...racing].map((item, index) => item.status === "matched" ? item : polled[index]);
+            const codes = outcome.filter((item) => item.status === "matched").map((item) => (item as { code: string }).code);
+            assert.equal(codes.length, 3, JSON.stringify(outcome));
+            assert.equal(new Set(codes).size, 1);
+            assert.equal((await rooms.getRoom(codes[0], guardian)).players.length, 3);
             await MatchTicket.deleteMany({ userId: { $in: ids } });
         });
 
